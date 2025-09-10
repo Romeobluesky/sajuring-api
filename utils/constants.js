@@ -1,0 +1,102 @@
+// 사용자 역할
+const USER_ROLES = {
+  USER: 'USER',
+  CONSULT: 'CONSULT', 
+  ADMIN: 'ADMIN'
+};
+
+// 사용자 상태
+const USER_STATUS = {
+  ACTIVE: 'ACTIVE',
+  INACTIVE: 'INACTIVE',
+  SUSPENDED: 'SUSPENDED'
+};
+
+// 상담사 등급
+const CONSULTANT_GRADES = {
+  NORMAL: '일반',
+  VIP: 'VIP',
+  VVIP: 'VVIP'
+};
+
+// 상담사 레벨
+const CONSULTANT_LEVELS = {
+  NORMAL: '일반',
+  PARTNER1: '파트너1',
+  PARTNER2: '파트너2',
+  PARTNER3: '파트너3',
+  PARTNER4: '파트너4',
+  PARTNER5: '파트너5',
+  PARTNER6: '파트너6'
+};
+
+// 상담 분야
+const CONSULTATION_FIELDS = {
+  TAROT: '타로',
+  DIVINATION: '신점'
+};
+
+// FAQ 상태
+const FAQ_STATUS = {
+  ACTIVE: 'active',
+  INACTIVE: 'inactive'
+};
+
+// 문의사항 상태
+const INQUIRY_STATUS = {
+  PENDING: 'pending',
+  ANSWERED: 'answered',
+  CLOSED: 'closed'
+};
+
+// 이벤트 상태
+const EVENT_STATUS = {
+  ACTIVE: 'active',
+  INACTIVE: 'inactive',
+  ENDED: 'ended'
+};
+
+// 응답 코드
+const RESPONSE_CODES = {
+  SUCCESS: 'SUCCESS',
+  VALIDATION_ERROR: 'VALIDATION_ERROR',
+  AUTHENTICATION_ERROR: 'AUTHENTICATION_ERROR',
+  AUTHORIZATION_ERROR: 'AUTHORIZATION_ERROR',
+  NOT_FOUND: 'NOT_FOUND',
+  DUPLICATE_ERROR: 'DUPLICATE_ERROR',
+  DATABASE_ERROR: 'DATABASE_ERROR',
+  SERVER_ERROR: 'SERVER_ERROR'
+};
+
+// HTTP 상태 코드
+const HTTP_STATUS = {
+  OK: 200,
+  CREATED: 201,
+  BAD_REQUEST: 400,
+  UNAUTHORIZED: 401,
+  FORBIDDEN: 403,
+  NOT_FOUND: 404,
+  CONFLICT: 409,
+  INTERNAL_SERVER_ERROR: 500
+};
+
+// 페이지네이션 기본값
+const PAGINATION = {
+  DEFAULT_PAGE: 1,
+  DEFAULT_LIMIT: 20,
+  MAX_LIMIT: 100
+};
+
+module.exports = {
+  USER_ROLES,
+  USER_STATUS,
+  CONSULTANT_GRADES,
+  CONSULTANT_LEVELS,
+  CONSULTATION_FIELDS,
+  FAQ_STATUS,
+  INQUIRY_STATUS,
+  EVENT_STATUS,
+  RESPONSE_CODES,
+  HTTP_STATUS,
+  PAGINATION
+};
