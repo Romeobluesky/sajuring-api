@@ -125,8 +125,8 @@ pm2 --version
 sudo apt install git -y
 
 # Git 설정
-git config --global user.name "sajuring-api"
-git config --global user.email "sajuring-api@sajuring.com"
+git config --global user.name "Romeobluesky"
+git config --global user.email "romeobluesky@gmail.com"
 
 # 설정 확인
 git config --list
@@ -148,13 +148,12 @@ sudo apt install -y mysql-client
 # sajuring-api 계정으로 작업
 cd /home/sajuring-api
 
-# 프로젝트 디렉토리 생성
-mkdir -p projects/sajuring-api
+# 운영 관련 디렉토리 생성
 mkdir -p logs
 mkdir -p backups
 
 # 디렉토리 구조 확인
-tree /home/sajuring-api
+ls -la /home/sajuring-api
 ```
 
 ### 2. 로그 디렉토리 권한 설정
@@ -169,7 +168,7 @@ chmod 755 /home/sajuring-api/backups
 ### 1. SSH 키 생성
 ```bash
 # SSH 키 생성
-ssh-keygen -t rsa -b 4096 -C "sajuring-api@sajuring.com"
+ssh-keygen -t rsa -b 4096 -C "romeobluesky@gmail.com"
 
 # 기본 경로 사용: /home/sajuring-api/.ssh/id_rsa
 # 패스프레이즈는 선택사항
@@ -193,19 +192,22 @@ cat ~/.ssh/id_rsa.pub
 
 ## 📦 Git 저장소 설정 및 배포
 
-### 1. Git 저장소 클론
+### 1. Git 저장소 설정
 ```bash
-# 프로젝트 디렉토리로 이동
-cd /home/sajuring-api/projects
+# sajuring-api 홈 디렉토리로 이동
+cd /home/sajuring-api
 
-# 저장소 클론 (HTTPS 방식)
-git clone https://github.com/your-username/sajuring-api.git
+# Git 초기화
+git init
 
-# 또는 SSH 방식 (SSH 키 설정 후)
-git clone git@github.com:your-username/sajuring-api.git
+# 원격 저장소 추가
+git remote add origin https://github.com/Romeobluesky/sajuring-api.git
 
-# 디렉토리 이동
-cd sajuring-api
+# 원격 저장소 확인
+git remote -v
+
+# 최신 코드 가져오기
+git pull origin main
 ```
 
 ### 2. 환경 변수 파일 생성
@@ -348,7 +350,7 @@ warn() {
 log "🚀 Sajuring API 배포 시작"
 
 # 프로젝트 디렉토리로 이동
-cd /home/sajuring-api/projects/sajuring-api
+cd /home/sajuring-api/sajuring-api
 
 # Git 상태 확인
 log "📋 Git 상태 확인"
@@ -445,6 +447,204 @@ sudo netstat -tlnp | grep :3013
 
 # 또는
 sudo ss -tlnp | grep :3013
+```
+
+### 3. nginx 프록시 설정 (선택사항)
+```bash
+# nginx 설정 파일 생성 (기존 nginx 활용)
+sudo nano /etc/nginx/sites-available/sajuring-api
+```
+
+#### nginx 설정 예시 (sajuring-api)
+```nginx
+server {
+    listen 80;
+    server_name api.sajuring.co.kr;
+
+    location / {
+        proxy_pass http://localhost:3013;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+```
+
+### 4. nginx 설정 활성화
+```bash
+# nginx 설정 파일 심볼릭 링크 생성
+sudo ln -s /etc/nginx/sites-available/sajuring-api /etc/nginx/sites-enabled/
+
+# nginx 설정 테스트
+sudo nginx -t
+
+# nginx 재시작
+sudo systemctl reload nginx
+```
+
+## 🔒 SSL/HTTPS 설정 (Let's Encrypt)
+
+### 1. Certbot 상태 확인 (이미 설치되어 있음)
+```bash
+# Certbot 설치 여부 확인
+certbot --version
+
+# 기존 인증서 목록 확인
+sudo certbot certificates
+
+# 기존 도메인들 확인
+sudo ls -la /etc/letsencrypt/live/
+```
+
+### 2. sajuring-api용 도메인 SSL 인증서 발급
+```bash
+# 새 도메인용 SSL 인증서 발급
+sudo certbot --nginx -d api.sajuring.co.kr
+
+# 또는 기존 도메인에 서브도메인 추가
+sudo certbot --nginx -d sajuring.co.kr -d www.sajuring.co.kr -d admin.sajuring.co.kr -d api.sajuring.co.kr
+
+# 인증서 발급 확인
+sudo certbot certificates
+```
+
+### 3. nginx SSL 설정 업데이트
+Certbot이 자동으로 nginx 설정을 업데이트하지만, 수동 설정이 필요한 경우:
+
+```bash
+# nginx 설정 파일 수정
+sudo nano /etc/nginx/sites-available/sajuring-api
+```
+
+#### SSL이 적용된 nginx 설정 예시
+```nginx
+server {
+    listen 80;
+    server_name api.sajuring.co.kr;
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name api.sajuring.co.kr;
+
+    # SSL 인증서 경로 (Certbot이 자동 생성)
+    ssl_certificate /etc/letsencrypt/live/api.sajuring.co.kr/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/api.sajuring.co.kr/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    # API 서버 프록시
+    location / {
+        proxy_pass http://localhost:3013;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+        
+        # CORS 헤더 (API용)
+        add_header 'Access-Control-Allow-Origin' '*' always;
+        add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, OPTIONS' always;
+        add_header 'Access-Control-Allow-Headers' 'DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization' always;
+        
+        # Preflight 요청 처리
+        if ($request_method = 'OPTIONS') {
+            add_header 'Access-Control-Allow-Origin' '*';
+            add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, OPTIONS';
+            add_header 'Access-Control-Allow-Headers' 'DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization';
+            add_header 'Access-Control-Max-Age' 1728000;
+            add_header 'Content-Type' 'text/plain; charset=utf-8';
+            add_header 'Content-Length' 0;
+            return 204;
+        }
+    }
+
+    # 보안 헤더
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "no-referrer-when-downgrade" always;
+    add_header Content-Security-Policy "default-src 'self' http: https: data: blob: 'unsafe-inline'" always;
+}
+```
+
+### 4. SSL 설정 적용
+```bash
+# nginx 설정 테스트
+sudo nginx -t
+
+# nginx 재시작
+sudo systemctl reload nginx
+
+# SSL 인증서 상태 확인
+sudo certbot certificates
+
+# 방화벽에 HTTPS 포트 허용
+sudo ufw allow 443
+```
+
+### 5. SSL 인증서 자동 갱신 확인
+```bash
+# 자동 갱신 설정 확인 (이미 설정되어 있을 것)
+sudo systemctl status certbot.timer
+
+# 갱신 테스트 (실제 갱신하지 않고 테스트만)
+sudo certbot renew --dry-run
+
+# cron 작업 확인
+sudo crontab -l | grep certbot
+```
+
+### 6. HTTPS API 테스트
+```bash
+# HTTPS로 Health Check 테스트
+curl https://api.sajuring.co.kr/health
+
+# 또는 IP로 테스트 (SNI 사용)
+curl -H "Host: api.sajuring.co.kr" https://1.234.2.37/health
+
+# SSL 인증서 정보 확인
+openssl s_client -connect api.sajuring.co.kr:443 -servername api.sajuring.co.kr
+```
+
+### 7. Flutter 앱에서 HTTPS API 사용
+Flutter 앱의 API 베이스 URL을 HTTPS로 업데이트:
+
+```dart
+// lib/services/api_service.dart
+class ApiService {
+  // 개발환경
+  static const String baseUrlDev = 'http://10.0.2.2:3013/api';
+  
+  // 프로덕션 환경 (HTTPS)
+  static const String baseUrlProd = 'https://api.sajuring.co.kr/api';
+  
+  static String get baseUrl {
+    return kDebugMode ? baseUrlDev : baseUrlProd;
+  }
+}
+```
+
+### 8. 혼합 환경 테스트
+```bash
+# HTTP와 HTTPS 모두 테스트
+echo "HTTP 테스트:"
+curl http://1.234.2.37:3013/health
+
+echo "HTTPS 테스트 (도메인):"
+curl https://api.sajuring.co.kr/health
+
+echo "HTTPS 리다이렉션 테스트:"
+curl -I http://api.sajuring.co.kr/health
 ```
 
 ## 🔍 서비스 상태 모니터링
