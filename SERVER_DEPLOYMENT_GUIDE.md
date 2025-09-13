@@ -8,7 +8,7 @@
 
 **기존 운영 서비스:**
 - **nginx**: 웹서버 실행 중
-- **mysql**: 데이터베이스 서버 실행 중  
+- **mysql**: 데이터베이스 서버 실행 중
 - **sajuring-www**: 웹사이트 (포트 3003, PM2 관리)
 - **sajuring-admin**: 관리자 시스템 (포트 3014, PM2 관리)
 
@@ -28,7 +28,7 @@ ssh admin@1.234.2.37
 # nginx 상태 확인
 sudo systemctl status nginx
 
-# mysql 상태 확인  
+# mysql 상태 확인
 sudo systemctl status mysql
 
 # 기존 PM2 프로세스 확인
@@ -77,21 +77,13 @@ pwd
 sudo whoami
 ```
 
-## 🔧 sajuring-api 계정 환경 설정
+## 🔧 개발 환경 설정
 
-### 1. sajuring-api 계정으로 전환
+### 1. Node.js 설치
+
+#### 방법 1: NodeSource를 통한 설치 (권장)
 ```bash
-# sajuring-api 계정으로 전환
-sudo su - sajuring-api
-
-# 홈 디렉토리 확인
-pwd
-# 결과: /home/sajuring-api
-```
-
-### 2. Node.js 설치 (계정별 설치)
-```bash
-# sajuring-api 계정에서 NodeSource 저장소 추가
+# NodeSource 저장소 추가
 curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
 
 # Node.js 설치
@@ -102,21 +94,37 @@ node --version
 npm --version
 ```
 
-### 3. PM2 설치 (계정별 PM2)
+#### 방법 2: NVM을 통한 설치
 ```bash
-# sajuring-api 계정에서 PM2 전역 설치
-npm install -g pm2
+# NVM 설치
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+
+# 터미널 재시작 또는 source 명령
+source ~/.bashrc
+
+# 최신 LTS Node.js 설치
+nvm install --lts
+nvm use --lts
+
+# 기본 버전으로 설정
+nvm alias default node
+```
+
+### 2. PM2 설치 (프로세스 관리자)
+```bash
+# PM2 전역 설치
+sudo npm install -g pm2
 
 # PM2 버전 확인
 pm2 --version
-
-# PM2 초기화
-pm2 status
 ```
 
-### 4. Git 설정 (sajuring-api 계정용)
+### 3. Git 설치 및 설정
 ```bash
-# Git 설정 (이미 시스템에 설치되어 있음)
+# Git 설치
+sudo apt install git -y
+
+# Git 설정
 git config --global user.name "sajuring-api"
 git config --global user.email "sajuring-api@sajuring.com"
 
@@ -124,7 +132,14 @@ git config --global user.email "sajuring-api@sajuring.com"
 git config --list
 ```
 
-> **참고**: 기존 서버에 이미 mysql-client, curl, wget 등 기본 도구들이 설치되어 있습니다.
+### 4. 기타 필요한 도구 설치
+```bash
+# 개발 도구 설치
+sudo apt install -y curl wget unzip build-essential
+
+# MySQL 클라이언트 설치 (DB 연결 테스트용)
+sudo apt install -y mysql-client
+```
 
 ## 📁 프로젝트 디렉토리 구조 생성
 
@@ -233,13 +248,10 @@ npm install --production
 
 ### 4. 데이터베이스 연결 테스트
 ```bash
-# API를 통한 데이터베이스 연결 테스트
+# 데이터베이스 연결 테스트
 npm run test:db
 
-# 로컬 MySQL 직접 연결 테스트 (mysql이 같은 서버에서 실행 중)
-mysql -h localhost -P 3306 -u sajuring2025 -p sajuring_db
-
-# 또는 IP로 연결
+# MySQL 직접 연결 테스트
 mysql -h 1.234.2.37 -P 3306 -u sajuring2025 -p sajuring_db
 ```
 
@@ -407,323 +419,43 @@ chmod +x /home/sajuring-api/deploy.sh
 /home/sajuring-api/deploy.sh
 ```
 
-## 🔥 포트 및 nginx 연동 설정
+## 🔥 방화벽 및 포트 설정
 
-### 1. 포트 사용 현황 확인
+### 1. 방화벽 설정 (Ubuntu UFW)
 ```bash
-# 현재 포트 사용 상황 확인
-sudo netstat -tlnp | grep -E ":(80|443|3003|3013|3014|3306)"
-
-# sajuring-api 포트 3013 사용 가능 여부 확인
-sudo lsof -i :3013
-```
-
-### 2. nginx 프록시 설정 (선택사항)
-```bash
-# nginx 설정 파일 수정 (기존 nginx 활용)
-sudo nano /etc/nginx/sites-available/sajuring-api
-
-# sajuring-api용 nginx 설정 생성
-```
-
-#### nginx 설정 예시 (sajuring-api)
-```nginx
-server {
-    listen 80;
-    server_name api.sajuring.co.kr;  # 또는 적절한 도메인
-
-    location / {
-        proxy_pass http://localhost:3013;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cache_bypass $http_upgrade;
-    }
-}
-```
-
-### 3. 방화벽 설정 (이미 운영 중인 경우)
-```bash
-# 현재 방화벽 상태 확인
+# UFW 상태 확인
 sudo ufw status
 
-# API 포트 3013 허용 (필요시)
-sudo ufw allow 3013
+# 필요한 포트 열기
+sudo ufw allow 22      # SSH
+sudo ufw allow 3013    # API 서버
+sudo ufw allow 3306    # MySQL (로컬 접근만 필요한 경우 생략)
 
-# 방화벽 상태 재확인
+# 방화벽 활성화
+sudo ufw enable
+
+# 상태 재확인
 sudo ufw status verbose
 ```
 
-### 4. nginx 설정 활성화 (선택사항)
+### 2. 포트 사용 확인
 ```bash
-# nginx 설정 파일 심볼릭 링크 생성
-sudo ln -s /etc/nginx/sites-available/sajuring-api /etc/nginx/sites-enabled/
+# 포트 사용 상태 확인
+sudo netstat -tlnp | grep :3013
 
-# nginx 설정 테스트
-sudo nginx -t
-
-# nginx 재시작
-sudo systemctl reload nginx
-```
-
-## 🔒 SSL/HTTPS 설정 (Let's Encrypt)
-
-### 1. Certbot 상태 확인 (이미 설치되어 있음)
-```bash
-# Certbot 설치 여부 확인
-certbot --version
-
-# 기존 인증서 목록 확인
-sudo certbot certificates
-
-# 기존 도메인들 확인
-sudo ls -la /etc/letsencrypt/live/
-```
-
-### 2. sajuring-api용 도메인 SSL 인증서 발급
-```bash
-# 새 도메인용 SSL 인증서 발급
-sudo certbot --nginx -d api.sajuring.co.kr
-
-# 또는 기존 도메인에 서브도메인 추가
-sudo certbot --nginx -d sajuring.co.kr -d www.sajuring.co.kr -d admin.sajuring.co.kr -d api.sajuring.co.kr
-
-# 인증서 발급 확인
-sudo certbot certificates
-```
-
-### 3. nginx SSL 설정 업데이트
-Certbot이 자동으로 nginx 설정을 업데이트하지만, 수동 설정이 필요한 경우:
-
-```bash
-# nginx 설정 파일 수정
-sudo nano /etc/nginx/sites-available/sajuring-api
-```
-
-#### SSL이 적용된 nginx 설정 예시
-```nginx
-server {
-    listen 80;
-    server_name api.sajuring.co.kr;
-    return 301 https://$server_name$request_uri;
-}
-
-server {
-    listen 443 ssl http2;
-    server_name api.sajuring.co.kr;
-
-    # SSL 인증서 경로 (Certbot이 자동 생성)
-    ssl_certificate /etc/letsencrypt/live/api.sajuring.co.kr/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/api.sajuring.co.kr/privkey.pem;
-    include /etc/letsencrypt/options-ssl-nginx.conf;
-    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
-
-    # API 서버 프록시
-    location / {
-        proxy_pass http://localhost:3013;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cache_bypass $http_upgrade;
-        
-        # CORS 헤더 (API용)
-        add_header 'Access-Control-Allow-Origin' '*' always;
-        add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, OPTIONS' always;
-        add_header 'Access-Control-Allow-Headers' 'DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization' always;
-        
-        # Preflight 요청 처리
-        if ($request_method = 'OPTIONS') {
-            add_header 'Access-Control-Allow-Origin' '*';
-            add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, OPTIONS';
-            add_header 'Access-Control-Allow-Headers' 'DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization';
-            add_header 'Access-Control-Max-Age' 1728000;
-            add_header 'Content-Type' 'text/plain; charset=utf-8';
-            add_header 'Content-Length' 0;
-            return 204;
-        }
-    }
-
-    # 보안 헤더
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    add_header X-XSS-Protection "1; mode=block" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header Referrer-Policy "no-referrer-when-downgrade" always;
-    add_header Content-Security-Policy "default-src 'self' http: https: data: blob: 'unsafe-inline'" always;
-}
-```
-
-### 4. SSL 설정 적용
-```bash
-# nginx 설정 테스트
-sudo nginx -t
-
-# nginx 재시작
-sudo systemctl reload nginx
-
-# SSL 인증서 상태 확인
-sudo certbot certificates
-
-# 방화벽에 HTTPS 포트 허용
-sudo ufw allow 443
-```
-
-### 5. SSL 인증서 자동 갱신 확인
-```bash
-# 자동 갱신 설정 확인 (이미 설정되어 있을 것)
-sudo systemctl status certbot.timer
-
-# 갱신 테스트 (실제 갱신하지 않고 테스트만)
-sudo certbot renew --dry-run
-
-# cron 작업 확인
-sudo crontab -l | grep certbot
-```
-
-### 6. HTTPS API 테스트
-```bash
-# HTTPS로 Health Check 테스트
-curl https://api.sajuring.co.kr/health
-
-# 또는 IP로 테스트 (SNI 사용)
-curl -H "Host: api.sajuring.co.kr" https://1.234.2.37/health
-
-# SSL 인증서 정보 확인
-openssl s_client -connect api.sajuring.co.kr:443 -servername api.sajuring.co.kr
-```
-
-### 7. Flutter 앱에서 HTTPS API 사용
-Flutter 앱의 API 베이스 URL을 HTTPS로 업데이트:
-
-```dart
-// lib/services/api_service.dart
-class ApiService {
-  // 개발환경
-  static const String baseUrlDev = 'http://10.0.2.2:3013/api';
-  
-  // 프로덕션 환경 (HTTPS)
-  static const String baseUrlProd = 'https://api.sajuring.co.kr/api';
-  
-  static String get baseUrl {
-    return kDebugMode ? baseUrlDev : baseUrlProd;
-  }
-}
-```
-
-### 8. 혼합 환경 테스트
-```bash
-# HTTP와 HTTPS 모두 테스트
-echo "HTTP 테스트:"
-curl http://1.234.2.37:3013/health
-
-echo "HTTPS 테스트 (도메인):"
-curl https://api.sajuring.co.kr/health
-
-echo "HTTPS 리다이렉션 테스트:"
-curl -I http://api.sajuring.co.kr/health
-```
-
-## 🔐 SSL 보안 강화 (선택사항)
-
-### 1. SSL 설정 강화
-```bash
-# 강화된 SSL 설정 파일 생성
-sudo nano /etc/nginx/snippets/ssl-sajuring-api.conf
-```
-
-#### ssl-sajuring-api.conf 내용
-```nginx
-# SSL 프로토콜 및 암호화 설정
-ssl_protocols TLSv1.2 TLSv1.3;
-ssl_prefer_server_ciphers off;
-ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384;
-
-# SSL 세션 설정
-ssl_session_timeout 1d;
-ssl_session_cache shared:MozTLS:10m;
-ssl_session_tickets off;
-
-# OCSP 스테이플링
-ssl_stapling on;
-ssl_stapling_verify on;
-
-# 보안 헤더
-add_header Strict-Transport-Security "max-age=63072000" always;
-```
-
-### 2. SSL 설정 적용
-```bash
-# nginx 설정 파일에 include 추가
-sudo nano /etc/nginx/sites-available/sajuring-api
-
-# 다음 라인 추가:
-# include /etc/nginx/snippets/ssl-sajuring-api.conf;
-
-# 설정 테스트 및 적용
-sudo nginx -t
-sudo systemctl reload nginx
+# 또는
+sudo ss -tlnp | grep :3013
 ```
 
 ## 🔍 서비스 상태 모니터링
 
-### 1. 전체 서버 상태 확인 스크립트
+### 1. 시스템 상태 확인 스크립트
 ```bash
-# 전체 서버 상태 확인 스크립트 생성
-nano /home/sajuring-api/server-status.sh
+# 상태 확인 스크립트 생성
+nano /home/sajuring-api/status.sh
 ```
 
-#### server-status.sh 내용
-```bash
-#!/bin/bash
-
-echo "=== 사주링 서버 전체 상태 ==="
-echo "날짜: $(date)"
-echo ""
-
-echo "🖥️ 시스템 정보:"
-echo "CPU 사용률: $(top -bn1 | grep "Cpu(s)" | awk '{print $2}' | awk -F'%' '{print $1}')"
-echo "메모리 사용률: $(free | grep Mem | awk '{printf("%.2f%%", $3/$2 * 100.0)}')"
-echo "디스크 사용률: $(df -h / | awk 'NR==2{printf "%s", $5}')"
-echo ""
-
-echo "🌐 포트 사용 현황:"
-sudo netstat -tlnp | grep -E ":(3003|3013|3014)" | awk '{print $4 " -> " $1}'
-echo ""
-
-echo "🚀 각 계정별 PM2 상태:"
-echo "--- sajuring-www (포트 3003) ---"
-sudo su - sajuring-www -c "pm2 status" 2>/dev/null || echo "PM2 not running"
-
-echo "--- sajuring-admin (포트 3014) ---"  
-sudo su - sajuring-admin -c "pm2 status" 2>/dev/null || echo "PM2 not running"
-
-echo "--- sajuring-api (포트 3013) ---"
-sudo su - sajuring-api -c "pm2 status" 2>/dev/null || echo "PM2 not running"
-echo ""
-
-echo "🔧 시스템 서비스 상태:"
-echo "Nginx: $(sudo systemctl is-active nginx)"
-echo "MySQL: $(sudo systemctl is-active mysql)"
-echo ""
-
-echo "📋 sajuring-api 최근 로그 (마지막 5줄):"
-tail -5 /home/sajuring-api/logs/combined.log 2>/dev/null || echo "로그 파일 없음"
-```
-
-### 2. sajuring-api 전용 상태 스크립트
-```bash
-# sajuring-api 전용 상태 확인 스크립트 생성
-nano /home/sajuring-api/api-status.sh
-```
-
-#### api-status.sh 내용
+#### status.sh 내용
 ```bash
 #!/bin/bash
 
@@ -731,12 +463,18 @@ echo "=== Sajuring API 서버 상태 ==="
 echo "날짜: $(date)"
 echo ""
 
+echo "🖥️  시스템 정보:"
+echo "CPU 사용률: $(top -bn1 | grep "Cpu(s)" | awk '{print $2}' | awk -F'%' '{print $1}')"
+echo "메모리 사용률: $(free | grep Mem | awk '{printf("%.2f%%", $3/$2 * 100.0)}')"
+echo "디스크 사용률: $(df -h / | awk 'NR==2{printf "%s", $5}')"
+echo ""
+
 echo "🚀 PM2 상태:"
 pm2 status
 echo ""
 
 echo "📊 프로세스 정보:"
-ps aux | grep "node.*sajuring-api" | grep -v grep
+ps aux | grep "sajuring-api" | grep -v grep
 echo ""
 
 echo "🌐 네트워크 상태:"
@@ -744,22 +482,12 @@ sudo netstat -tlnp | grep :3013
 echo ""
 
 echo "📋 최근 로그 (마지막 10줄):"
-tail -10 /home/sajuring-api/logs/combined.log 2>/dev/null || echo "로그 파일 없음"
-
-echo "🔍 Health Check 테스트:"
-curl -s http://localhost:3013/health 2>/dev/null || echo "API 응답 없음"
+tail -10 /home/sajuring-api/logs/combined.log
 ```
 
-### 3. 실행 권한 부여
+### 2. 실행 권한 부여
 ```bash
-# 스크립트들에 실행 권한 부여
-chmod +x /home/sajuring-api/server-status.sh
-chmod +x /home/sajuring-api/api-status.sh
-chmod +x /home/sajuring-api/deploy.sh
-
-# 스크립트 실행 테스트
-./server-status.sh    # 전체 서버 상태 확인
-./api-status.sh       # sajuring-api만 확인
+chmod +x /home/sajuring-api/status.sh
 ```
 
 ## 📝 로그 관리
@@ -852,10 +580,11 @@ ssh -T git@github.com
 # 방화벽 확인
 sudo ufw status
 
+# MySQL 서비스 상태 확인
+sudo systemctl status mysql
+
 # 네트워크 연결 테스트
 telnet 1.234.2.37 3306
-
-# 외부 MySQL 서버이므로 로컬 MySQL 서비스는 확인하지 않음
 ```
 
 ## 📋 배포 완료 체크리스트
@@ -883,74 +612,18 @@ telnet 1.234.2.37 3306
 
 ## 🎉 배포 완료 후 확인
 
-### 1. sajuring-api 서비스 확인
 ```bash
-# sajuring-api 계정에서 실행
-su - sajuring-api
-
-# PM2 상태 확인
+# 1. 서비스 상태 확인
 pm2 status
 
-# API 응답 테스트 (로컬)
-curl http://localhost:3013/health
+# 2. API 응답 테스트
+curl http://1.234.2.37:3001/health
 
-# API 응답 테스트 (외부)
-curl http://1.234.2.37:3013/health
+# 3. 로그 확인
+pm2 logs sajuring-api
 
-# 로그 확인
-pm2 logs sajuring-api --lines 20
+# 4. 시스템 리소스 확인
+./status.sh
 ```
 
-### 2. 전체 서버 상태 확인
-```bash
-# 관리자 계정에서 실행
-sudo su - sajuring-api -c "./server-status.sh"
-
-# 또는 각각 확인
-sudo systemctl status nginx
-sudo systemctl status mysql
-sudo su - sajuring-www -c "pm2 status"
-sudo su - sajuring-admin -c "pm2 status"  
-sudo su - sajuring-api -c "pm2 status"
-```
-
-### 3. 포트별 서비스 확인
-```bash
-# HTTP 포트 응답 테스트
-curl http://1.234.2.37:3003  # sajuring-www
-curl http://1.234.2.37:3013/health  # sajuring-api (REST API)
-curl http://1.234.2.37:3014  # sajuring-admin
-
-# HTTPS 도메인 응답 테스트 (SSL 설정 후)
-curl https://sajuring.co.kr  # sajuring-www
-curl https://api.sajuring.co.kr/health  # sajuring-api (REST API)
-curl https://admin.sajuring.co.kr  # sajuring-admin
-
-# 포트 사용 현황
-sudo netstat -tlnp | grep -E ":(80|443|3003|3013|3014)"
-```
-
-## 📋 운영 환경 최종 구성
-
-**서버 구성 (1.234.2.37):**
-- **nginx**: 리버스 프록시 (포트 80/443) + SSL/TLS 종료
-- **mysql**: 데이터베이스 서버 (포트 3306)
-- **sajuring-www**: 웹사이트 (포트 3003, PM2 관리)
-- **sajuring-admin**: 관리자 시스템 (포트 3014, PM2 관리)
-- **sajuring-api**: REST API 서버 (포트 3013, PM2 관리) ✨ **새로 추가**
-
-**도메인 및 SSL 구성:**
-- **sajuring.co.kr** → nginx → sajuring-www (포트 3003) ✅ HTTPS
-- **admin.sajuring.co.kr** → nginx → sajuring-admin (포트 3014) ✅ HTTPS  
-- **api.sajuring.co.kr** → nginx → sajuring-api (포트 3013) ✨ **새로 추가** ✅ HTTPS
-
-**계정별 PM2 프로세스:**
-- `sajuring-www` 계정: 웹사이트 관리
-- `sajuring-admin` 계정: 관리자 시스템 관리  
-- `sajuring-api` 계정: REST API 서버 관리 ✨ **새로 추가**
-
-**Let's Encrypt 인증서:**
-- 기존 인증서에 `api.sajuring.co.kr` 도메인 추가
-- 자동 갱신 시스템 활용 (기존 certbot.timer)
-
-이제 1.234.2.37 서버에 sajuring-api가 기존 서비스들과 함께 성공적으로 배포되었습니다! 🚀
+이제 1.234.2.37 서버에 sajuring-api가 성공적으로 배포되었습니다! 🚀
