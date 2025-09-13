@@ -29,11 +29,18 @@ const dbConfig = {
 
 ## Key Database Tables
 
-1. **users** - 사용자 정보 (role: USER/CONSULT/ADMIN)
-2. **consultants** - 상담사 정보 (타로/신점 전문분야)
-3. **event** - 이벤트 관리
-4. **faq** - FAQ 관리
-5. **inquiries** - 문의사항 관리
+1. **users** - 사용자 정보 (role: USER/CONSULTANT/ADMIN, login_id로 로그인)
+2. **consultants** - 상담사 정보 (타로/신점 전문분야, JSON 기반 전문분야/상담스타일)
+3. **specialties** - 전문분야 마스터 테이블 (타로, 신점 등)
+4. **consultation_styles** - 상담스타일 마스터 테이블
+5. **consultations** - 상담 내역 관리 (고객-상담사 매칭, 결제 연동)
+6. **payments** - 결제 정보 관리 (링 구매, 상담료 결제)
+7. **reviews** - 상담 후기 관리 (평점, 리뷰 내용)
+8. **event** - 이벤트 관리 (상담사/사용자 이벤트)
+9. **faq** - FAQ 관리
+10. **inquiries** - 문의사항 관리
+11. **notices** - 공지사항 관리
+12. **header_banners** - 헤더 배너 관리
 
 ## Development Commands
 
@@ -80,24 +87,40 @@ sajuring-api/
 ## API Endpoints
 
 ### Authentication
-- POST /api/auth/register - 회원가입
-- POST /api/auth/login - 로그인
+- POST /api/auth/register - 회원가입 (login_id 기반)
+- POST /api/auth/login - 로그인 (login_id 또는 email)
 - GET /api/auth/me - 내 정보 조회
 
 ### Consultants
-- GET /api/consultants - 상담사 목록 (필터링 지원)
+- GET /api/consultants - 상담사 목록 (전문분야/스타일 필터링 지원)
 - GET /api/consultants/:id - 상담사 상세 정보
 - GET /api/consultants/search - 검색 및 필터
+- GET /api/specialties - 전문분야 목록
+- GET /api/consultation-styles - 상담스타일 목록
 
-### Ring System (포인트)
+### Consultations
+- POST /api/consultations/start - 상담 시작
+- POST /api/consultations/end - 상담 종료
+- GET /api/consultations/history - 내 상담 기록
+- POST /api/consultations/rate - 상담 평가
+
+### Payments & Rings
 - GET /api/rings/balance - 내 링 잔액
 - POST /api/rings/purchase - 링 구매
 - POST /api/rings/transfer - 링 전송
+- GET /api/payments/history - 결제 내역
+
+### Reviews
+- GET /api/reviews/consultant/:id - 상담사별 후기
+- POST /api/reviews - 후기 작성
+- PUT /api/reviews/:id - 후기 수정
 
 ### Others
 - GET /api/faq - FAQ 목록
 - POST /api/inquiries - 문의사항 등록
 - GET /api/events - 이벤트 목록
+- GET /api/notices - 공지사항 목록
+- GET /api/header-banners - 헤더 배너 목록
 
 ## Environment Variables (.env)
 

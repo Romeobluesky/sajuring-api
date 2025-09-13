@@ -6,7 +6,7 @@
 
 ## API 서버 정보
 
-- **서버 URL**: `http://localhost:3001` (개발환경)
+- **서버 URL**: `http://localhost:3013` (개발환경)
 - **Base URL**: `/api`
 - **인증 방식**: JWT Bearer Token
 - **Content-Type**: `application/json`
@@ -30,10 +30,13 @@ POST /api/auth/register
 {
   "email": "user@example.com",
   "password": "password123!",
-  "username": "user123",
+  "login_id": "user123",
+  "username": "사용자실명",
   "nickname": "사용자닉네임",
   "phone": "010-1234-5678",
-  "birth_date": "1990-01-01"
+  "birth_date": "1990-01-01",
+  "gender": "M",
+  "policy": "Y"
 }
 ```
 
@@ -64,12 +67,25 @@ GET /api/consultants
 **쿼리 파라미터:**
 - `page` (옵셔널): 페이지 번호 (기본값: 1)
 - `limit` (옵셔널): 페이지당 개수 (기본값: 20)
-- `specialty` (옵셔널): 전문분야 필터
-- `status` (옵셔널): 상태 필터
+- `consultation_field` (옵셔널): 상담분야 필터 (타로/신점)
+- `consultant_grade` (옵셔널): 상담사 등급 필터
+- `status` (옵셔널): 상태 필터 (active/inactive/waiting)
+- `specialties` (옵셔널): 전문분야 ID 배열
+- `consultation_styles` (옵셔널): 상담스타일 ID 배열
 
 #### 상담사 상세 조회
 ```
 GET /api/consultants/:id
+```
+
+#### 전문분야 목록
+```
+GET /api/specialties
+```
+
+#### 상담스타일 목록
+```
+GET /api/consultation-styles
 ```
 
 ### 💍 링 (Rings) - 인증 필요
@@ -88,8 +104,9 @@ POST /api/rings/purchase
 **요청 Body:**
 ```json
 {
-  "amount": 100,
-  "payment_method": "credit_card"
+  "charge_amount": 100,
+  "payment_method": "card",
+  "is_sajuring_pay": 0
 }
 ```
 
@@ -106,6 +123,12 @@ POST /api/rings/transfer
   "message": "선물입니다"
 }
 ```
+
+#### 결제 내역 조회
+```
+GET /api/payments/history
+```
+**헤더:** `Authorization: Bearer <token>`
 
 ### ❓ FAQ
 
@@ -140,6 +163,77 @@ GET /api/inquiries/my
 ```
 **헤더:** `Authorization: Bearer <token>`
 
+### 🏥 상담 (Consultations) - 인증 필요
+
+#### 상담 시작
+```
+POST /api/consultations/start
+```
+**헤더:** `Authorization: Bearer <token>`
+**요청 Body:**
+```json
+{
+  "consultant_id": 123,
+  "consultation_type": "타로",
+  "consultation_method": "전화"
+}
+```
+
+#### 상담 종료
+```
+POST /api/consultations/end
+```
+**헤더:** `Authorization: Bearer <token>`
+**요청 Body:**
+```json
+{
+  "consultation_id": "cons_20250101_001",
+  "consultation_summary": "상담 요약",
+  "consultation_notes": "상담 메모"
+}
+```
+
+#### 내 상담 기록
+```
+GET /api/consultations/history
+```
+**헤더:** `Authorization: Bearer <token>`
+
+#### 상담 평가
+```
+POST /api/consultations/rate
+```
+**헤더:** `Authorization: Bearer <token>`
+**요청 Body:**
+```json
+{
+  "consultation_id": "cons_20250101_001",
+  "review_rating": 5,
+  "review_content": "매우 만족스러운 상담이었습니다."
+}
+```
+
+### ⭐ 후기 (Reviews)
+
+#### 상담사별 후기 조회
+```
+GET /api/reviews/consultant/:id
+```
+
+#### 후기 작성
+```
+POST /api/reviews
+```
+**헤더:** `Authorization: Bearer <token>`
+**요청 Body:**
+```json
+{
+  "consultation_id": 123,
+  "review_rating": 5,
+  "review_content": "훌륭한 상담이었습니다."
+}
+```
+
 ### 🎉 이벤트 (Events)
 
 #### 이벤트 목록 조회
@@ -153,6 +247,23 @@ GET /api/events
 #### 이벤트 상세 조회
 ```
 GET /api/events/:id
+```
+
+### 📢 공지사항 (Notices)
+
+#### 공지사항 목록 조회
+```
+GET /api/notices
+```
+**쿼리 파라미터:**
+- `type` (옵셔널): 공지 대상 (general/consultant)
+- `category` (옵셔널): 카테고리 (서비스/이벤트/시스템/기타)
+
+### 🎨 헤더 배너 (Header Banners)
+
+#### 헤더 배너 목록 조회
+```
+GET /api/header-banners
 ```
 
 ### 🧪 테스트 엔드포인트
@@ -193,8 +304,8 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
-  static const String baseUrl = 'http://10.0.2.2:3001/api'; // Android Emulator
-  // static const String baseUrl = 'http://localhost:3001/api'; // iOS Simulator
+  static const String baseUrl = 'http://10.0.2.2:3013/api'; // Android Emulator
+  // static const String baseUrl = 'http://localhost:3013/api'; // iOS Simulator
   
   // 토큰 저장/조회 메서드
   static Future<String?> getToken() async {
@@ -293,38 +404,50 @@ class ApiResponse<T> {
 // lib/models/user.dart
 class User {
   final int id;
+  final String? loginId;
   final String username;
   final String email;
-  final String nickname;
+  final String? nickname;
   final String? phone;
   final String? birthDate;
+  final String? gender;
   final String role;
   final int rings;
   final String status;
+  final int roleLevel;
+  final String? profileImage;
 
   User({
     required this.id,
+    this.loginId,
     required this.username,
     required this.email,
-    required this.nickname,
+    this.nickname,
     this.phone,
     this.birthDate,
+    this.gender,
     required this.role,
     required this.rings,
     required this.status,
+    required this.roleLevel,
+    this.profileImage,
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
     return User(
       id: json['id'],
+      loginId: json['login_id'],
       username: json['username'],
       email: json['email'],
       nickname: json['nickname'],
       phone: json['phone'],
       birthDate: json['birth_date'],
+      gender: json['gender'],
       role: json['role'],
       rings: json['rings'] ?? 0,
       status: json['status'],
+      roleLevel: json['role_level'] ?? 2,
+      profileImage: json['profile_image'],
     );
   }
 }
@@ -345,19 +468,25 @@ class AuthService {
   static Future<ApiResponse<Map<String, dynamic>>> register({
     required String email,
     required String password,
+    required String loginId,
     required String username,
     required String nickname,
     required String phone,
     required String birthDate,
+    required String gender,
+    required String policy,
   }) async {
     try {
       final response = await ApiService.post('/auth/register', body: {
         'email': email,
         'password': password,
+        'login_id': loginId,
         'username': username,
         'nickname': nickname,
         'phone': phone,
         'birth_date': birthDate,
+        'gender': gender,
+        'policy': policy,
       });
 
       final jsonResponse = json.decode(response.body);
@@ -442,29 +571,80 @@ import 'api_service.dart';
 
 class Consultant {
   final int id;
-  final String consultantName;
-  final String specialty;
-  final int experience;
-  final String status;
+  final String consultantNumber;
+  final String userId;
+  final String name;
+  final String nickname;
+  final String stageName;
+  final String phone;
+  final String email;
+  final String? profileImage;
   final List<String> introImages;
+  final String? introduction;
+  final String? career;
+  final String? region;
+  final String consultantGrade;
+  final String consultationField;
+  final double? consultationFee;
+  final int rings;
+  final double consultationRate;
+  final String status;
+  final List<int> specialties;
+  final List<int> consultationStyles;
 
   Consultant({
     required this.id,
-    required this.consultantName,
-    required this.specialty,
-    required this.experience,
-    required this.status,
+    required this.consultantNumber,
+    required this.userId,
+    required this.name,
+    required this.nickname,
+    required this.stageName,
+    required this.phone,
+    required this.email,
+    this.profileImage,
     required this.introImages,
+    this.introduction,
+    this.career,
+    this.region,
+    required this.consultantGrade,
+    required this.consultationField,
+    this.consultationFee,
+    required this.rings,
+    required this.consultationRate,
+    required this.status,
+    required this.specialties,
+    required this.consultationStyles,
   });
 
   factory Consultant.fromJson(Map<String, dynamic> json) {
     return Consultant(
       id: json['id'],
-      consultantName: json['consultant_name'],
-      specialty: json['specialty'],
-      experience: json['experience'],
+      consultantNumber: json['consultant_number'],
+      userId: json['user_id'],
+      name: json['name'],
+      nickname: json['nickname'],
+      stageName: json['stage_name'],
+      phone: json['phone'],
+      email: json['email'],
+      profileImage: json['profile_image'],
+      introImages: json['intro_images'] != null 
+          ? List<String>.from(json['intro_images']) 
+          : [],
+      introduction: json['introduction'],
+      career: json['career'],
+      region: json['region'],
+      consultantGrade: json['consultant_grade'],
+      consultationField: json['consultation_field'],
+      consultationFee: json['consultation_fee']?.toDouble(),
+      rings: json['rings'] ?? 0,
+      consultationRate: json['consultation_rate']?.toDouble() ?? 0.0,
       status: json['status'],
-      introImages: (json['intro_images'] as List?)?.cast<String>() ?? [],
+      specialties: json['specialties'] != null 
+          ? List<int>.from(json['specialties']) 
+          : [],
+      consultationStyles: json['consultation_styles'] != null 
+          ? List<int>.from(json['consultation_styles']) 
+          : [],
     );
   }
 }
@@ -474,13 +654,23 @@ class ConsultantService {
   static Future<ApiResponse<Map<String, dynamic>>> getConsultants({
     int page = 1,
     int limit = 20,
-    String? specialty,
+    String? consultationField,
+    String? consultantGrade,
     String? status,
+    List<int>? specialties,
+    List<int>? consultationStyles,
   }) async {
     try {
       String endpoint = '/consultants?page=$page&limit=$limit';
-      if (specialty != null) endpoint += '&specialty=$specialty';
+      if (consultationField != null) endpoint += '&consultation_field=$consultationField';
+      if (consultantGrade != null) endpoint += '&consultant_grade=$consultantGrade';
       if (status != null) endpoint += '&status=$status';
+      if (specialties != null && specialties.isNotEmpty) {
+        endpoint += '&specialties=${specialties.join(',')}';
+      }
+      if (consultationStyles != null && consultationStyles.isNotEmpty) {
+        endpoint += '&consultation_styles=${consultationStyles.join(',')}';
+      }
 
       final response = await ApiService.get(endpoint);
       final jsonResponse = json.decode(response.body);
@@ -663,7 +853,7 @@ class ApiService {
 class HealthCheckService {
   static Future<bool> checkServerHealth() async {
     try {
-      final response = await http.get(Uri.parse('http://10.0.2.2:3001/health'));
+      final response = await http.get(Uri.parse('http://10.0.2.2:3013/health'));
       return response.statusCode == 200;
     } catch (e) {
       return false;
@@ -710,7 +900,7 @@ void handleApiError(ApiResponse response) {
    class Config {
      static const String baseUrl = String.fromEnvironment(
        'API_BASE_URL',
-       defaultValue: 'http://10.0.2.2:3001/api',
+       defaultValue: 'http://10.0.2.2:3013/api',
      );
    }
    ```
