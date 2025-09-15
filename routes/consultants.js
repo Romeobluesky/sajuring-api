@@ -113,15 +113,18 @@ router.get('/popular', optionalAuth, async (req, res) => {
   try {
     const {
       field = null,
+      consultation_field = null,
       limit = 10
     } = req.query;
 
     let whereConditions = ['consultation_rate > 0'];
     let queryParams = [];
 
-    if (field) {
+    // consultation_field 또는 field 파라미터 둘 다 지원
+    const fieldValue = consultation_field || field;
+    if (fieldValue) {
       whereConditions.push('consultation_field = ?');
-      queryParams.push(field);
+      queryParams.push(fieldValue);
     }
 
     const whereClause = whereConditions.join(' AND ');

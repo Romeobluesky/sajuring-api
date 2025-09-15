@@ -37,9 +37,21 @@ app.use((req, res, next) => {
 
 // Health Check 엔드포인트
 app.get('/health', (req, res) => {
+  // 한국 시간(KST) 기준으로 timestamp 생성
+  const koreaTime = new Date().toLocaleString('ko-KR', {
+    timeZone: 'Asia/Seoul',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  });
+
   res.json({
     status: 'OK',
-    timestamp: new Date().toISOString(),
+    timestamp: koreaTime,
     version: '1.0.0',
     environment: process.env.NODE_ENV || 'development'
   });

@@ -25,7 +25,7 @@ router.get('/', optionalAuth, validatePagination, async (req, res) => {
     let queryParams = [];
 
     if (event_state) {
-      whereConditions.push('evnet_state = ?'); // 원본 테이블의 오타 그대로 사용
+      whereConditions.push('event_state = ?'); // DB 컬럼명 수정됨 (event_state)
       queryParams.push(event_state);
     }
 
@@ -43,7 +43,7 @@ router.get('/', optionalAuth, validatePagination, async (req, res) => {
     // 이벤트 목록 조회
     const [events] = await pool.execute(
       `SELECT id, event_title, event_context, image_web_src, image_mobile_src,
-       start_date, end_date, event_type, evnet_state, event_count, event_index, udate_At
+       start_date, end_date, event_type, event_state, event_count, event_index, udate_At
        FROM event 
        WHERE ${whereClause}
        ORDER BY event_index ASC, start_date DESC
@@ -82,7 +82,7 @@ router.get('/:id', optionalAuth, validateId, async (req, res) => {
 
     const [events] = await pool.execute(
       `SELECT id, event_title, event_context, image_web_src, image_mobile_src,
-       start_date, end_date, event_type, evnet_state, consultant_list, 
+       start_date, end_date, event_type, event_state, consultant_list, 
        gues_list, event_count, event_index, udate_At
        FROM event WHERE id = ?`,
       [eventId]
@@ -162,7 +162,7 @@ router.post('/:id/join', authenticateToken, validateId, async (req, res) => {
 
     // 이벤트 정보 조회
     const [events] = await pool.execute(
-      'SELECT id, event_title, gues_list, end_date, evnet_state FROM event WHERE id = ?',
+      'SELECT id, event_title, gues_list, end_date, event_state FROM event WHERE id = ?',
       [eventId]
     );
 
@@ -178,7 +178,7 @@ router.post('/:id/join', authenticateToken, validateId, async (req, res) => {
     const event = events[0];
 
     // 이벤트 상태 확인
-    if (event.evnet_state !== 'active') {
+    if (event.event_state !== 'active') {
       return errorResponse(
         res,
         '참여할 수 없는 이벤트입니다.',
@@ -355,7 +355,7 @@ router.get('/my/participations', authenticateToken, validatePagination, async (r
     // MySQL 버전에 따라 다를 수 있으므로 LIKE로 대체
     const [events] = await pool.execute(
       `SELECT id, event_title, event_context, image_web_src, 
-       start_date, end_date, event_type, evnet_state, event_count,
+       start_date, end_date, event_type, event_state, event_count,
        udate_At
        FROM event 
        WHERE gues_list LIKE ?
