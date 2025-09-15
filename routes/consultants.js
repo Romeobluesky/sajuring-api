@@ -15,6 +15,7 @@ router.get('/', optionalAuth, async (req, res) => {
   try {
     const {
       field = null,
+      consultation_field = null,
       grade = null,
       consultant_grade = null,
       search = null,
@@ -27,9 +28,11 @@ router.get('/', optionalAuth, async (req, res) => {
     let whereConditions = ['1=1'];
     let queryParams = [];
 
-    if (field) {
+    // consultation_field 또는 field 파라미터 둘 다 지원
+    const fieldValue = consultation_field || field;
+    if (fieldValue) {
       whereConditions.push('consultation_field = ?');
-      queryParams.push(field);
+      queryParams.push(fieldValue);
     }
 
     if (grade) {
@@ -80,7 +83,8 @@ router.get('/', optionalAuth, async (req, res) => {
       consultants: consultantsWithParsedImages,
       count: consultants.length,
       filters: {
-        field,
+        field: fieldValue,
+        consultation_field: fieldValue,
         grade,
         consultant_grade,
         search,
