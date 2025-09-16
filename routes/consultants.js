@@ -195,135 +195,8 @@ router.get('/events', optionalAuth, async (req, res) => {
 });
 
 /**
- * GET /api/consultants/:id
- * 상담사 상세 정보 조회
- */
-router.get('/:id', optionalAuth, validateId, async (req, res) => {
-  try {
-    const consultantId = req.params.id;
-
-    const [consultants] = await pool.execute(
-      `SELECT c.*, u.username, u.email, u.status as user_status
-       FROM consultants c
-       LEFT JOIN users u ON c.user_id = u.id
-       WHERE c.id = ?`,
-      [consultantId]
-    );
-
-    if (consultants.length === 0) {
-      return errorResponse(
-        res,
-        '상담사를 찾을 수 없습니다.',
-        RESPONSE_CODES.NOT_FOUND,
-        HTTP_STATUS.NOT_FOUND
-      );
-    }
-
-    const consultant = consultants[0];
-
-    // intro_images JSON 파싱
-    consultant.intro_images = safeJsonParse(consultant.intro_images, []);
-
-    // 민감한 정보 제거 (이메일, 전화번호는 관리자나 본인만)
-    const isOwner = req.user && req.user.id === consultant.user_id;
-    const isAdmin = req.user && req.user.role === 'ADMIN';
-
-    if (!isOwner && !isAdmin) {
-      delete consultant.email;
-      delete consultant.phone;
-      delete consultant.user_id;
-      delete consultant.username;
-    }
-
-    successResponse(res, '상담사 정보 조회 완료', {
-      consultant
-    });
-
-  } catch (error) {
-    console.error('상담사 상세 조회 에러:', error);
-    errorResponse(
-      res,
-      '상담사 정보 조회 중 오류가 발생했습니다.',
-      RESPONSE_CODES.DATABASE_ERROR,
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    );
-  }
-});
-
-/**
- * GET /api/consultants/field/:field
- * 전문분야별 상담사 조회
- */
-router.get('/field/:field', optionalAuth, async (req, res) => {
-  try {
-    const { field } = req.params;
-    const {
-      grade = null,
-      sort = 'consultation_rate',
-      order = 'desc',
-      limit = 20
-    } = req.query;
-
-    // 유효한 분야 확인
-    const validFields = ['타로', '신점'];
-    if (!validFields.includes(field)) {
-      return errorResponse(
-        res,
-        '유효하지 않은 전문분야입니다.',
-        RESPONSE_CODES.VALIDATION_ERROR,
-        HTTP_STATUS.BAD_REQUEST
-      );
-    }
-
-    let whereConditions = ['consultation_field = ?'];
-    let queryParams = [field];
-
-    if (grade) {
-      whereConditions.push('grade = ?');
-      queryParams.push(grade);
-    }
-
-    const whereClause = whereConditions.join(' AND ');
-
-    // 안전한 정렬
-    const allowedSortFields = ['consultation_rate', 'consultation_fee', 'created_at'];
-    const sortField = allowedSortFields.includes(sort) ? sort : 'consultation_rate';
-    const sortOrder = order === 'asc' ? 'ASC' : 'DESC';
-    const limitNum = Math.min(parseInt(limit) || 20, 100);
-
-    // 상담사 목록 조회
-    const [consultants] = await pool.execute(
-      `SELECT id, consultant_number, name, nickname, stage_name,
-       profile_image, introduction, grade, consultant_grade,
-       consultation_field, consultation_fee, consultation_rate,
-       event_selected, ring_expert, shorts_connected
-       FROM consultants 
-       WHERE ${whereClause}
-       ORDER BY ${sortField} ${sortOrder}
-       LIMIT ${limitNum}`,
-      queryParams
-    );
-
-    successResponse(res, `${field} 전문 상담사 목록 조회 완료`, {
-      field,
-      consultants,
-      count: consultants.length
-    });
-
-  } catch (error) {
-    console.error('전문분야별 상담사 조회 에러:', error);
-    errorResponse(
-      res,
-      '전문분야별 상담사 조회 중 오류가 발생했습니다.',
-      RESPONSE_CODES.DATABASE_ERROR,
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    );
-  }
-});
-
-/**
  * GET /api/consultants/consultant-events
- * 메인 배너용 이벤트 목록 조회
+ * 메인 배너용 이벤트 목록 조회 (must be before /:id route)
  */
 router.get('/consultant-events', optionalAuth, validatePagination, async (req, res) => {
   try {
@@ -451,7 +324,7 @@ router.get('/consultant-events/my/participations', authenticateToken, validatePa
 
 /**
  * GET /api/consultants/consultant-events/:id
- * 메인 배너 이벤트 상세 조회
+ * 메인 배너 이벤트 상세 조회 (must be before /:id route)
  */
 router.get('/consultant-events/:id', optionalAuth, validateId, async (req, res) => {
   try {
@@ -536,7 +409,7 @@ router.get('/consultant-events/:id', optionalAuth, validateId, async (req, res) 
 
 /**
  * POST /api/consultants/consultant-events/:id/join
- * 사용자 이벤트 참여
+ * 메인 배너 이벤트 참여 (must be before /:id route)
  */
 router.post('/consultant-events/:id/join', authenticateToken, validateId, async (req, res) => {
   try {
@@ -652,7 +525,7 @@ router.post('/consultant-events/:id/join', authenticateToken, validateId, async 
 
 /**
  * POST /api/consultants/consultant-events/:id/leave
- * 사용자 이벤트 참여 취소
+ * 메인 배너 이벤트 참여 취소 (must be before /:id route)
  */
 router.post('/consultant-events/:id/leave', authenticateToken, validateId, async (req, res) => {
   try {
@@ -714,6 +587,133 @@ router.post('/consultant-events/:id/leave', authenticateToken, validateId, async
     errorResponse(
       res,
       '이벤트 참여 취소 처리 중 오류가 발생했습니다.',
+      RESPONSE_CODES.DATABASE_ERROR,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
+  }
+});
+
+/**
+ * GET /api/consultants/:id
+ * 상담사 상세 정보 조회
+ */
+router.get('/:id', optionalAuth, validateId, async (req, res) => {
+  try {
+    const consultantId = req.params.id;
+
+    const [consultants] = await pool.execute(
+      `SELECT c.*, u.username, u.email, u.status as user_status
+       FROM consultants c
+       LEFT JOIN users u ON c.user_id = u.id
+       WHERE c.id = ?`,
+      [consultantId]
+    );
+
+    if (consultants.length === 0) {
+      return errorResponse(
+        res,
+        '상담사를 찾을 수 없습니다.',
+        RESPONSE_CODES.NOT_FOUND,
+        HTTP_STATUS.NOT_FOUND
+      );
+    }
+
+    const consultant = consultants[0];
+
+    // intro_images JSON 파싱
+    consultant.intro_images = safeJsonParse(consultant.intro_images, []);
+
+    // 민감한 정보 제거 (이메일, 전화번호는 관리자나 본인만)
+    const isOwner = req.user && req.user.id === consultant.user_id;
+    const isAdmin = req.user && req.user.role === 'ADMIN';
+
+    if (!isOwner && !isAdmin) {
+      delete consultant.email;
+      delete consultant.phone;
+      delete consultant.user_id;
+      delete consultant.username;
+    }
+
+    successResponse(res, '상담사 정보 조회 완료', {
+      consultant
+    });
+
+  } catch (error) {
+    console.error('상담사 상세 조회 에러:', error);
+    errorResponse(
+      res,
+      '상담사 정보 조회 중 오류가 발생했습니다.',
+      RESPONSE_CODES.DATABASE_ERROR,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
+  }
+});
+
+/**
+ * GET /api/consultants/field/:field
+ * 전문분야별 상담사 조회
+ */
+router.get('/field/:field', optionalAuth, async (req, res) => {
+  try {
+    const { field } = req.params;
+    const {
+      grade = null,
+      sort = 'consultation_rate',
+      order = 'desc',
+      limit = 20
+    } = req.query;
+
+    // 유효한 분야 확인
+    const validFields = ['타로', '신점'];
+    if (!validFields.includes(field)) {
+      return errorResponse(
+        res,
+        '유효하지 않은 전문분야입니다.',
+        RESPONSE_CODES.VALIDATION_ERROR,
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+
+    let whereConditions = ['consultation_field = ?'];
+    let queryParams = [field];
+
+    if (grade) {
+      whereConditions.push('grade = ?');
+      queryParams.push(grade);
+    }
+
+    const whereClause = whereConditions.join(' AND ');
+
+    // 안전한 정렬
+    const allowedSortFields = ['consultation_rate', 'consultation_fee', 'created_at'];
+    const sortField = allowedSortFields.includes(sort) ? sort : 'consultation_rate';
+    const sortOrder = order === 'asc' ? 'ASC' : 'DESC';
+    const limitNum = Math.min(parseInt(limit) || 20, 100);
+
+    // 상담사 목록 조회
+    const [consultants] = await pool.execute(
+      `SELECT id, consultant_number, name, nickname, stage_name,
+       profile_image, introduction, grade, consultant_grade,
+       consultation_field, consultation_fee, consultation_rate,
+       event_selected, ring_expert, shorts_connected
+       FROM consultants 
+       WHERE ${whereClause}
+       ORDER BY ${sortField} ${sortOrder}
+       LIMIT ${limitNum}`,
+      queryParams
+    );
+
+    successResponse(res, `${field} 전문 상담사 목록 조회 완료`, {
+      field,
+      consultants,
+      count: consultants.length
+    });
+
+  } catch (error) {
+    console.error('전문분야별 상담사 조회 에러:', error);
+    errorResponse(
+      res,
+      '전문분야별 상담사 조회 중 오류가 발생했습니다.',
       RESPONSE_CODES.DATABASE_ERROR,
       HTTP_STATUS.INTERNAL_SERVER_ERROR
     );
