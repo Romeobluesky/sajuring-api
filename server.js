@@ -11,6 +11,7 @@ const ringRoutes = require('./routes/rings');
 const faqRoutes = require('./routes/faq');
 const inquiryRoutes = require('./routes/inquiries');
 const eventRoutes = require('./routes/events');
+const usersRoutes = require('./routes/users');
 const headerBannerRoutes = require('./routes/header-banners');
 const testRoutes = require('./routes/test');
 
@@ -65,6 +66,7 @@ app.use('/api/rings', ringRoutes);
 app.use('/api/faq', faqRoutes);
 app.use('/api/inquiries', inquiryRoutes);
 app.use('/api/events', eventRoutes);
+app.use('/api/users', usersRoutes);
 app.use('/api/header-banners', headerBannerRoutes);
 app.use('/api/test', testRoutes);
 

@@ -36,11 +36,12 @@ const dbConfig = {
 5. **consultations** - 상담 내역 관리 (고객-상담사 매칭, 결제 연동)
 6. **payments** - 결제 정보 관리 (링 구매, 상담료 결제)
 7. **reviews** - 상담 후기 관리 (평점, 리뷰 내용)
-8. **event** - 이벤트 관리 (상담사/사용자 이벤트)
-9. **faq** - FAQ 관리
-10. **inquiries** - 문의사항 관리
-11. **notices** - 공지사항 관리
-12. **header_banners** - 헤더 배너 관리
+8. **event** - 일반 이벤트 관리 (사용자 대상 이벤트)
+9. **consultants_event** - 메인 배너 이벤트 관리 (앱 배너 표시용, 사용자 참여)
+10. **faq** - FAQ 관리
+11. **inquiries** - 문의사항 관리
+12. **notices** - 공지사항 관리
+13. **header_banners** - 헤더 배너 관리 (스타일, 클릭 추적)
 
 ## Development Commands
 
@@ -98,6 +99,16 @@ sajuring-api/
 - GET /api/specialties - 전문분야 목록
 - GET /api/consultation-styles - 상담스타일 목록
 
+#### Main Banner Events (메인 배너 이벤트)
+- GET /api/consultants/consultant-events - 메인 배너용 이벤트 목록 조회
+- GET /api/consultants/consultant-events/:id - 메인 배너 이벤트 상세 조회 (조회수 증가)
+- POST /api/consultants/consultant-events/:id/join - 이벤트 참여 (사용자가 guest_list에 추가)
+- POST /api/consultants/consultant-events/:id/leave - 이벤트 참여 취소
+- GET /api/consultants/consultant-events/my/participations - 내가 참여한 이벤트 목록
+
+#### Consultants Special Selection (이벤트 선정 상담사)
+- GET /api/consultants/events - 이벤트 선정 상담사 목록 조회 (event_selected = 1)
+
 ### Consultations
 - POST /api/consultations/start - 상담 시작
 - POST /api/consultations/end - 상담 종료
@@ -115,12 +126,23 @@ sajuring-api/
 - POST /api/reviews - 후기 작성
 - PUT /api/reviews/:id - 후기 수정
 
+### Events (일반 이벤트)
+- GET /api/events - 이벤트 목록 조회
+- GET /api/events/:id - 이벤트 상세 조회
+- POST /api/events/:id/join - 이벤트 참여
+- POST /api/events/:id/leave - 이벤트 참여 취소
+- GET /api/events/my/participations - 내가 참여한 이벤트 목록
+
+### Header Banners
+- GET /api/header-banners - 헤더 배너 목록 조회 (관리자용)
+- GET /api/header-banners/active - 현재 활성화된 배너 조회 (클라이언트용)
+- GET /api/header-banners/:id - 헤더 배너 상세 조회
+- POST /api/header-banners/:id/click - 배너 클릭 수 증가
+
 ### Others
 - GET /api/faq - FAQ 목록
 - POST /api/inquiries - 문의사항 등록
-- GET /api/events - 이벤트 목록
 - GET /api/notices - 공지사항 목록
-- GET /api/header-banners - 헤더 배너 목록
 
 ## Environment Variables (.env)
 
@@ -139,10 +161,13 @@ NODE_ENV=development
 ## Key Features
 
 1. **JWT 기반 인증** - 토큰 기반 사용자 인증
-2. **역할 기반 접근 제어** - USER/CONSULT/ADMIN 역할
+2. **역할 기반 접근 제어** - USER/CONSULTANT/ADMIN 역할
 3. **링(포인트) 시스템** - 사용자-상담사간 포인트 거래
 4. **상담사 필터링** - 전문분야/등급별 검색
-5. **JSON 필드 처리** - intro_images, consultant_list 등
+5. **JSON 필드 처리** - intro_images, consultant_list, guest_list 등
+6. **이벤트 관리** - 일반 이벤트(event)와 메인 배너 이벤트(consultants_event) 분리
+7. **헤더 배너 시스템** - 스타일 커스터마이징, 클릭 추적, 기간 관리
+8. **메인 배너 이벤트** - 앱 메인 화면 배너용, 사용자 참여/취소 기능
 
 ## Security Considerations
 

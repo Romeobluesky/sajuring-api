@@ -322,10 +322,10 @@ router.get('/field/:field', optionalAuth, async (req, res) => {
 });
 
 /**
- * GET /api/consultants/events
- * 상담사 전용 이벤트 목록 조회
+ * GET /api/consultants/consultant-events
+ * 메인 배너용 이벤트 목록 조회
  */
-router.get('/events', optionalAuth, validatePagination, async (req, res) => {
+router.get('/consultant-events', optionalAuth, validatePagination, async (req, res) => {
   try {
     const {
       event_type = null,
@@ -355,7 +355,7 @@ router.get('/events', optionalAuth, validatePagination, async (req, res) => {
     const limitNum = Math.min(parseInt(limit) || 20, 100);
     const offset = (page - 1) * limitNum;
 
-    // 상담사 이벤트 목록 조회
+    // 메인 배너 이벤트 목록 조회
     const [events] = await pool.execute(
       `SELECT id, event_title, event_context, image_web_src, image_mobile_src,
        start_date, end_date, event_type, event_state, event_count, event_index, update_At
@@ -375,7 +375,7 @@ router.get('/events', optionalAuth, validatePagination, async (req, res) => {
 
     const pagination = createPagination(page, limitNum, total);
 
-    successResponse(res, '상담사 이벤트 목록 조회 완료', {
+    successResponse(res, '메인 배너 이벤트 목록 조회 완료', {
       events,
       count: events.length,
       filters: {
@@ -386,10 +386,10 @@ router.get('/events', optionalAuth, validatePagination, async (req, res) => {
     }, pagination);
 
   } catch (error) {
-    console.error('상담사 이벤트 목록 조회 에러:', error);
+    console.error('메인 배너 이벤트 목록 조회 에러:', error);
     errorResponse(
       res,
-      '상담사 이벤트 목록 조회 중 오류가 발생했습니다.',
+      '메인 배너 이벤트 목록 조회 중 오류가 발생했습니다.',
       RESPONSE_CODES.DATABASE_ERROR,
       HTTP_STATUS.INTERNAL_SERVER_ERROR
     );
@@ -397,10 +397,10 @@ router.get('/events', optionalAuth, validatePagination, async (req, res) => {
 });
 
 /**
- * GET /api/consultants/events/:id
- * 상담사 이벤트 상세 조회
+ * GET /api/consultants/consultant-events/:id
+ * 메인 배너 이벤트 상세 조회
  */
-router.get('/events/:id', optionalAuth, validateId, async (req, res) => {
+router.get('/consultant-events/:id', optionalAuth, validateId, async (req, res) => {
   try {
     const eventId = req.params.id;
 
@@ -415,7 +415,7 @@ router.get('/events/:id', optionalAuth, validateId, async (req, res) => {
     if (events.length === 0) {
       return errorResponse(
         res,
-        '상담사 이벤트를 찾을 수 없습니다.',
+        '이벤트를 찾을 수 없습니다.',
         RESPONSE_CODES.NOT_FOUND,
         HTTP_STATUS.NOT_FOUND
       );
@@ -441,38 +441,40 @@ router.get('/events/:id', optionalAuth, validateId, async (req, res) => {
 
     event.current_status = eventStatus;
 
-    // 참여 가능 여부 (상담사 로그인한 경우)
+    // 참여 가능 여부 (사용자 로그인한 경우)
     let canParticipate = false;
     let isParticipating = false;
 
     if (req.user && eventStatus === 'active') {
-      // 상담사 권한 확인
-      if (req.user.role === 'CONSULTANT') {
-        canParticipate = true;
+      canParticipate = true;
 
-        // 이미 참여 중인지 확인 (consultant_list에서)
-        const consultantList = event.consultant_list || [];
-        isParticipating = consultantList.some(consultant =>
-          consultant.user_id === req.user.id || consultant.id === req.user.id
-        );
-      }
+      // 이미 참여 중인지 확인 (guest_list에서)
+      const guestList = event.guest_list || [];
+      isParticipating = guestList.some(guest =>
+        guest.user_id === req.user.id || guest.id === req.user.id
+      );
     }
 
     event.participation = {
       can_participate: canParticipate,
-      is_participating: isParticipating,
-      requires_consultant_role: true
+      is_participating: isParticipating
     };
 
-    successResponse(res, '상담사 이벤트 상세 조회 완료', {
+    // 이벤트 조회수 증가
+    await pool.execute(
+      'UPDATE consultants_event SET event_count = event_count + 1 WHERE id = ?',
+      [eventId]
+    );
+
+    successResponse(res, '이벤트 상세 조회 완료', {
       event
     });
 
   } catch (error) {
-    console.error('상담사 이벤트 상세 조회 에러:', error);
+    console.error('이벤트 상세 조회 에러:', error);
     errorResponse(
       res,
-      '상담사 이벤트 상세 조회 중 오류가 발생했습니다.',
+      '이벤트 상세 조회 중 오류가 발생했습니다.',
       RESPONSE_CODES.DATABASE_ERROR,
       HTTP_STATUS.INTERNAL_SERVER_ERROR
     );
@@ -480,34 +482,24 @@ router.get('/events/:id', optionalAuth, validateId, async (req, res) => {
 });
 
 /**
- * POST /api/consultants/events/:id/join
- * 상담사 이벤트 참여
+ * POST /api/consultants/consultant-events/:id/join
+ * 사용자 이벤트 참여
  */
-router.post('/events/:id/join', authenticateToken, validateId, async (req, res) => {
+router.post('/consultant-events/:id/join', authenticateToken, validateId, async (req, res) => {
   try {
     const eventId = req.params.id;
     const userId = req.user.id;
 
-    // 상담사 권한 확인
-    if (req.user.role !== 'CONSULTANT') {
-      return errorResponse(
-        res,
-        '상담사만 참여할 수 있는 이벤트입니다.',
-        RESPONSE_CODES.FORBIDDEN,
-        HTTP_STATUS.FORBIDDEN
-      );
-    }
-
     // 이벤트 정보 조회
     const [events] = await pool.execute(
-      'SELECT id, event_title, consultant_list, end_date, event_state FROM consultants_event WHERE id = ?',
+      'SELECT id, event_title, guest_list, end_date, event_state FROM consultants_event WHERE id = ?',
       [eventId]
     );
 
     if (events.length === 0) {
       return errorResponse(
         res,
-        '상담사 이벤트를 찾을 수 없습니다.',
+        '이벤트를 찾을 수 없습니다.',
         RESPONSE_CODES.NOT_FOUND,
         HTTP_STATUS.NOT_FOUND
       );
@@ -536,11 +528,11 @@ router.post('/events/:id/join', authenticateToken, validateId, async (req, res) 
     }
 
     // 현재 참여자 목록 파싱
-    const consultantList = safeJsonParse(event.consultant_list, []);
+    const guestList = safeJsonParse(event.guest_list, []);
 
     // 이미 참여 중인지 확인
-    const isAlreadyParticipating = consultantList.some(consultant =>
-      consultant.user_id === userId || consultant.id === userId
+    const isAlreadyParticipating = guestList.some(guest =>
+      guest.user_id === userId || guest.id === userId
     );
 
     if (isAlreadyParticipating) {
@@ -552,56 +544,53 @@ router.post('/events/:id/join', authenticateToken, validateId, async (req, res) 
       );
     }
 
-    // 상담사 정보 조회
-    const [consultants] = await pool.execute(
-      'SELECT id, name, nickname, stage_name, grade, consultation_field FROM consultants WHERE user_id = ?',
+    // 사용자 정보 조회
+    const [users] = await pool.execute(
+      'SELECT id, username, nickname FROM users WHERE id = ?',
       [userId]
     );
 
-    if (consultants.length === 0) {
+    if (users.length === 0) {
       return errorResponse(
         res,
-        '상담사 정보를 찾을 수 없습니다.',
+        '사용자 정보를 찾을 수 없습니다.',
         RESPONSE_CODES.NOT_FOUND,
         HTTP_STATUS.NOT_FOUND
       );
     }
 
-    const consultant = consultants[0];
+    const user = users[0];
 
     // 참여자 목록에 추가
-    const newConsultant = {
-      id: consultant.id,
+    const newGuest = {
+      id: user.id,
       user_id: userId,
-      name: consultant.name,
-      nickname: consultant.nickname,
-      stage_name: consultant.stage_name,
-      grade: consultant.grade,
-      consultation_field: consultant.consultation_field,
+      username: user.username,
+      nickname: user.nickname,
       joined_at: new Date().toISOString()
     };
 
-    consultantList.push(newConsultant);
+    guestList.push(newGuest);
 
     // 이벤트 업데이트
     await pool.execute(
-      'UPDATE consultants_event SET consultant_list = ?, event_count = event_count + 1 WHERE id = ?',
-      [JSON.stringify(consultantList), eventId]
+      'UPDATE consultants_event SET guest_list = ? WHERE id = ?',
+      [JSON.stringify(guestList), eventId]
     );
 
-    successResponse(res, '상담사 이벤트 참여가 완료되었습니다.', {
+    successResponse(res, '이벤트 참여가 완료되었습니다.', {
       event: {
         id: eventId,
         title: event.event_title
       },
-      participant: newConsultant
+      participant: newGuest
     });
 
   } catch (error) {
-    console.error('상담사 이벤트 참여 에러:', error);
+    console.error('이벤트 참여 에러:', error);
     errorResponse(
       res,
-      '상담사 이벤트 참여 처리 중 오류가 발생했습니다.',
+      '이벤트 참여 처리 중 오류가 발생했습니다.',
       RESPONSE_CODES.DATABASE_ERROR,
       HTTP_STATUS.INTERNAL_SERVER_ERROR
     );
@@ -609,34 +598,24 @@ router.post('/events/:id/join', authenticateToken, validateId, async (req, res) 
 });
 
 /**
- * POST /api/consultants/events/:id/leave
- * 상담사 이벤트 참여 취소
+ * POST /api/consultants/consultant-events/:id/leave
+ * 사용자 이벤트 참여 취소
  */
-router.post('/events/:id/leave', authenticateToken, validateId, async (req, res) => {
+router.post('/consultant-events/:id/leave', authenticateToken, validateId, async (req, res) => {
   try {
     const eventId = req.params.id;
     const userId = req.user.id;
 
-    // 상담사 권한 확인
-    if (req.user.role !== 'CONSULTANT') {
-      return errorResponse(
-        res,
-        '상담사만 접근할 수 있습니다.',
-        RESPONSE_CODES.FORBIDDEN,
-        HTTP_STATUS.FORBIDDEN
-      );
-    }
-
     // 이벤트 정보 조회
     const [events] = await pool.execute(
-      'SELECT id, event_title, consultant_list FROM consultants_event WHERE id = ?',
+      'SELECT id, event_title, guest_list FROM consultants_event WHERE id = ?',
       [eventId]
     );
 
     if (events.length === 0) {
       return errorResponse(
         res,
-        '상담사 이벤트를 찾을 수 없습니다.',
+        '이벤트를 찾을 수 없습니다.',
         RESPONSE_CODES.NOT_FOUND,
         HTTP_STATUS.NOT_FOUND
       );
@@ -645,11 +624,11 @@ router.post('/events/:id/leave', authenticateToken, validateId, async (req, res)
     const event = events[0];
 
     // 현재 참여자 목록 파싱
-    const consultantList = safeJsonParse(event.consultant_list, []);
+    const guestList = safeJsonParse(event.guest_list, []);
 
     // 참여 중인지 확인
-    const participantIndex = consultantList.findIndex(consultant =>
-      consultant.user_id === userId || consultant.id === userId
+    const participantIndex = guestList.findIndex(guest =>
+      guest.user_id === userId || guest.id === userId
     );
 
     if (participantIndex === -1) {
@@ -662,15 +641,15 @@ router.post('/events/:id/leave', authenticateToken, validateId, async (req, res)
     }
 
     // 참여자 목록에서 제거
-    consultantList.splice(participantIndex, 1);
+    guestList.splice(participantIndex, 1);
 
     // 이벤트 업데이트
     await pool.execute(
-      'UPDATE consultants_event SET consultant_list = ?, event_count = GREATEST(event_count - 1, 0) WHERE id = ?',
-      [JSON.stringify(consultantList), eventId]
+      'UPDATE consultants_event SET guest_list = ? WHERE id = ?',
+      [JSON.stringify(guestList), eventId]
     );
 
-    successResponse(res, '상담사 이벤트 참여가 취소되었습니다.', {
+    successResponse(res, '이벤트 참여가 취소되었습니다.', {
       event: {
         id: eventId,
         title: event.event_title
@@ -678,10 +657,10 @@ router.post('/events/:id/leave', authenticateToken, validateId, async (req, res)
     });
 
   } catch (error) {
-    console.error('상담사 이벤트 참여 취소 에러:', error);
+    console.error('이벤트 참여 취소 에러:', error);
     errorResponse(
       res,
-      '상담사 이벤트 참여 취소 처리 중 오류가 발생했습니다.',
+      '이벤트 참여 취소 처리 중 오류가 발생했습니다.',
       RESPONSE_CODES.DATABASE_ERROR,
       HTTP_STATUS.INTERNAL_SERVER_ERROR
     );
@@ -689,26 +668,16 @@ router.post('/events/:id/leave', authenticateToken, validateId, async (req, res)
 });
 
 /**
- * GET /api/consultants/events/my/participations
- * 내가 참여한 상담사 이벤트 목록
+ * GET /api/consultants/consultant-events/my/participations
+ * 내가 참여한 이벤트 목록
  */
-router.get('/events/my/participations', authenticateToken, validatePagination, async (req, res) => {
+router.get('/consultant-events/my/participations', authenticateToken, validatePagination, async (req, res) => {
   try {
     const userId = req.user.id;
     const {
       page = PAGINATION.DEFAULT_PAGE,
       limit = PAGINATION.DEFAULT_LIMIT
     } = req.query;
-
-    // 상담사 권한 확인
-    if (req.user.role !== 'CONSULTANT') {
-      return errorResponse(
-        res,
-        '상담사만 접근할 수 있습니다.',
-        RESPONSE_CODES.FORBIDDEN,
-        HTTP_STATUS.FORBIDDEN
-      );
-    }
 
     const limitNum = Math.min(parseInt(limit) || 20, 100);
     const offset = (page - 1) * limitNum;
@@ -720,7 +689,7 @@ router.get('/events/my/participations', authenticateToken, validatePagination, a
        start_date, end_date, event_type, event_state, event_count,
        update_At
        FROM consultants_event
-       WHERE consultant_list LIKE ?
+       WHERE guest_list LIKE ?
        ORDER BY start_date DESC
        LIMIT ${limitNum} OFFSET ${offset}`,
       [`%"user_id":${userId}%`]
@@ -728,23 +697,23 @@ router.get('/events/my/participations', authenticateToken, validatePagination, a
 
     // 전체 개수 조회
     const [countResult] = await pool.execute(
-      'SELECT COUNT(*) as total FROM consultants_event WHERE consultant_list LIKE ?',
+      'SELECT COUNT(*) as total FROM consultants_event WHERE guest_list LIKE ?',
       [`%"user_id":${userId}%`]
     );
     const total = countResult[0].total;
 
     const pagination = createPagination(page, limitNum, total);
 
-    successResponse(res, '내가 참여한 상담사 이벤트 목록 조회 완료', {
+    successResponse(res, '내가 참여한 이벤트 목록 조회 완료', {
       events,
       count: events.length
     }, pagination);
 
   } catch (error) {
-    console.error('참여 상담사 이벤트 조회 에러:', error);
+    console.error('참여 이벤트 조회 에러:', error);
     errorResponse(
       res,
-      '참여 상담사 이벤트 조회 중 오류가 발생했습니다.',
+      '참여 이벤트 조회 중 오류가 발생했습니다.',
       RESPONSE_CODES.DATABASE_ERROR,
       HTTP_STATUS.INTERNAL_SERVER_ERROR
     );
