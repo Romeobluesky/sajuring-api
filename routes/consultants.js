@@ -397,6 +397,59 @@ router.get('/consultant-events', optionalAuth, validatePagination, async (req, r
 });
 
 /**
+ * GET /api/consultants/consultant-events/my/participations
+ * 내가 참여한 이벤트 목록 (must be before /:id route)
+ */
+router.get('/consultant-events/my/participations', authenticateToken, validatePagination, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const {
+      page = PAGINATION.DEFAULT_PAGE,
+      limit = PAGINATION.DEFAULT_LIMIT
+    } = req.query;
+
+    const limitNum = Math.min(parseInt(limit) || 20, 100);
+    const offset = (page - 1) * limitNum;
+
+    // JSON_CONTAINS 또는 JSON_SEARCH를 사용하여 참여한 이벤트 조회
+    // MySQL 버전에 따라 다를 수 있으므로 LIKE로 대체
+    const [events] = await pool.execute(
+      `SELECT id, event_title, event_context, image_web_src,
+       start_date, end_date, event_type, event_state, event_count,
+       update_At
+       FROM consultants_event
+       WHERE guest_list LIKE ?
+       ORDER BY start_date DESC
+       LIMIT ${limitNum} OFFSET ${offset}`,
+      [`%"user_id":${userId}%`]
+    );
+
+    // 전체 개수 조회
+    const [countResult] = await pool.execute(
+      'SELECT COUNT(*) as total FROM consultants_event WHERE guest_list LIKE ?',
+      [`%"user_id":${userId}%`]
+    );
+    const total = countResult[0].total;
+
+    const pagination = createPagination(page, limitNum, total);
+
+    successResponse(res, '내가 참여한 이벤트 목록 조회 완료', {
+      events,
+      count: events.length
+    }, pagination);
+
+  } catch (error) {
+    console.error('참여 이벤트 조회 에러:', error);
+    errorResponse(
+      res,
+      '참여 이벤트 조회 중 오류가 발생했습니다.',
+      RESPONSE_CODES.DATABASE_ERROR,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
+  }
+});
+
+/**
  * GET /api/consultants/consultant-events/:id
  * 메인 배너 이벤트 상세 조회
  */
@@ -661,59 +714,6 @@ router.post('/consultant-events/:id/leave', authenticateToken, validateId, async
     errorResponse(
       res,
       '이벤트 참여 취소 처리 중 오류가 발생했습니다.',
-      RESPONSE_CODES.DATABASE_ERROR,
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    );
-  }
-});
-
-/**
- * GET /api/consultants/consultant-events/my/participations
- * 내가 참여한 이벤트 목록
- */
-router.get('/consultant-events/my/participations', authenticateToken, validatePagination, async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const {
-      page = PAGINATION.DEFAULT_PAGE,
-      limit = PAGINATION.DEFAULT_LIMIT
-    } = req.query;
-
-    const limitNum = Math.min(parseInt(limit) || 20, 100);
-    const offset = (page - 1) * limitNum;
-
-    // JSON_CONTAINS 또는 JSON_SEARCH를 사용하여 참여한 이벤트 조회
-    // MySQL 버전에 따라 다를 수 있으므로 LIKE로 대체
-    const [events] = await pool.execute(
-      `SELECT id, event_title, event_context, image_web_src,
-       start_date, end_date, event_type, event_state, event_count,
-       update_At
-       FROM consultants_event
-       WHERE guest_list LIKE ?
-       ORDER BY start_date DESC
-       LIMIT ${limitNum} OFFSET ${offset}`,
-      [`%"user_id":${userId}%`]
-    );
-
-    // 전체 개수 조회
-    const [countResult] = await pool.execute(
-      'SELECT COUNT(*) as total FROM consultants_event WHERE guest_list LIKE ?',
-      [`%"user_id":${userId}%`]
-    );
-    const total = countResult[0].total;
-
-    const pagination = createPagination(page, limitNum, total);
-
-    successResponse(res, '내가 참여한 이벤트 목록 조회 완료', {
-      events,
-      count: events.length
-    }, pagination);
-
-  } catch (error) {
-    console.error('참여 이벤트 조회 에러:', error);
-    errorResponse(
-      res,
-      '참여 이벤트 조회 중 오류가 발생했습니다.',
       RESPONSE_CODES.DATABASE_ERROR,
       HTTP_STATUS.INTERNAL_SERVER_ERROR
     );
