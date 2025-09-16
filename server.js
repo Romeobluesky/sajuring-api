@@ -7,11 +7,17 @@ const { testConnection } = require('./config/database');
 // 라우트 import
 const authRoutes = require('./routes/auth');
 const consultantRoutes = require('./routes/consultants');
+const specialtiesRoutes = require('./routes/specialties');
 const ringRoutes = require('./routes/rings');
+const consultationsRoutes = require('./routes/consultations');
+const settlementsRoutes = require('./routes/settlements');
+const paymentsRoutes = require('./routes/payments');
+const reviewsRoutes = require('./routes/reviews');
 const faqRoutes = require('./routes/faq');
 const inquiryRoutes = require('./routes/inquiries');
 const eventRoutes = require('./routes/events');
 const usersRoutes = require('./routes/users');
+const noticesRoutes = require('./routes/notices');
 const headerBannerRoutes = require('./routes/header-banners');
 const testRoutes = require('./routes/test');
 
@@ -62,11 +68,18 @@ app.get('/health', (req, res) => {
 // API 라우트 설정
 app.use('/api/auth', authRoutes);
 app.use('/api/consultants', consultantRoutes);
+app.use('/api/specialties', specialtiesRoutes);
+app.use('/api/consultation-styles', specialtiesRoutes);
 app.use('/api/rings', ringRoutes);
+app.use('/api/consultations', consultationsRoutes);
+app.use('/api/settlements', settlementsRoutes);
+app.use('/api/payments', paymentsRoutes);
+app.use('/api/reviews', reviewsRoutes);
 app.use('/api/faq', faqRoutes);
 app.use('/api/inquiries', inquiryRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/users', usersRoutes);
+app.use('/api/notices', noticesRoutes);
 app.use('/api/header-banners', headerBannerRoutes);
 app.use('/api/test', testRoutes);
 

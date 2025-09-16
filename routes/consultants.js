@@ -720,4 +720,222 @@ router.get('/field/:field', optionalAuth, async (req, res) => {
   }
 });
 
+/**
+ * GET /api/consultants/search
+ * 상담사 검색 및 필터
+ */
+router.get('/search', optionalAuth, validatePagination, async (req, res) => {
+  try {
+    const {
+      keyword = null,
+      consultation_field = null,
+      consultant_grade = null,
+      specialties = null,
+      consultation_styles = null,
+      min_rating = null,
+      page = PAGINATION.DEFAULT_PAGE,
+      limit = PAGINATION.DEFAULT_LIMIT
+    } = req.query;
+
+    // WHERE 조건 구성
+    let whereConditions = ['c.status = "active"'];
+    let queryParams = [];
+
+    if (keyword) {
+      whereConditions.push('(c.name LIKE ? OR c.stage_name LIKE ? OR c.introduction LIKE ?)');
+      const keywordPattern = `%${keyword}%`;
+      queryParams.push(keywordPattern, keywordPattern, keywordPattern);
+    }
+
+    if (consultation_field) {
+      whereConditions.push('c.consultation_field = ?');
+      queryParams.push(consultation_field);
+    }
+
+    if (consultant_grade) {
+      whereConditions.push('c.consultant_grade = ?');
+      queryParams.push(consultant_grade);
+    }
+
+    if (min_rating) {
+      whereConditions.push('c.consultation_rate >= ?');
+      queryParams.push(parseFloat(min_rating));
+    }
+
+    if (specialties) {
+      const specialtyIds = specialties.split(',');
+      const specialtyConditions = specialtyIds.map(() => 'JSON_CONTAINS(c.specialties, ?)').join(' OR ');
+      whereConditions.push(`(${specialtyConditions})`);
+      specialtyIds.forEach(id => queryParams.push(`"${id}"`));
+    }
+
+    if (consultation_styles) {
+      const styleIds = consultation_styles.split(',');
+      const styleConditions = styleIds.map(() => 'JSON_CONTAINS(c.consultation_styles, ?)').join(' OR ');
+      whereConditions.push(`(${styleConditions})`);
+      styleIds.forEach(id => queryParams.push(`"${id}"`));
+    }
+
+    const whereClause = whereConditions.join(' AND ');
+    const limitNum = Math.min(parseInt(limit) || 20, 100);
+    const offset = (page - 1) * limitNum;
+
+    // 상담사 검색
+    const [consultants] = await pool.execute(
+      `SELECT c.*, u.username, u.email, u.status as user_status
+       FROM consultants c
+       LEFT JOIN users u ON c.user_id = u.id
+       WHERE ${whereClause}
+       ORDER BY c.consultation_rate DESC, c.consultation_hours DESC
+       LIMIT ${limitNum} OFFSET ${offset}`,
+      queryParams
+    );
+
+    // 전체 개수 조회
+    const [countResult] = await pool.execute(
+      `SELECT COUNT(*) as total FROM consultants c WHERE ${whereClause}`,
+      queryParams
+    );
+    const total = countResult[0].total;
+
+    const pagination = createPagination(page, limitNum, total);
+
+    successResponse(res, '상담사 검색 완료', {
+      consultants,
+      count: consultants.length,
+      search_filters: {
+        keyword,
+        consultation_field,
+        consultant_grade,
+        specialties,
+        consultation_styles,
+        min_rating,
+        limit: limitNum
+      }
+    }, pagination);
+
+  } catch (error) {
+    console.error('상담사 검색 에러:', error);
+    errorResponse(
+      res,
+      '상담사 검색 중 오류가 발생했습니다.',
+      RESPONSE_CODES.DATABASE_ERROR,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
+  }
+});
+
+/**
+ * GET /api/consultants/popular
+ * 인기 상담사 (consultation_rate 높은 순)
+ */
+router.get('/popular', optionalAuth, validatePagination, async (req, res) => {
+  try {
+    const {
+      consultation_field = null,
+      limit = 10
+    } = req.query;
+
+    // WHERE 조건 구성
+    let whereConditions = ['c.status = "active"'];
+    let queryParams = [];
+
+    if (consultation_field) {
+      whereConditions.push('c.consultation_field = ?');
+      queryParams.push(consultation_field);
+    }
+
+    const whereClause = whereConditions.join(' AND ');
+    const limitNum = Math.min(parseInt(limit) || 10, 50);
+
+    // 인기 상담사 조회 (평점 높은 순, 상담시간 많은 순)
+    const [consultants] = await pool.execute(
+      `SELECT c.id, c.consultant_number, c.name, c.stage_name, c.profile_image,
+       c.consultation_field, c.consultant_grade, c.consultation_rate,
+       c.consultation_hours, c.consultation_fee, c.introduction
+       FROM consultants c
+       LEFT JOIN users u ON c.user_id = u.id
+       WHERE ${whereClause} AND c.consultation_rate > 0
+       ORDER BY c.consultation_rate DESC, c.consultation_hours DESC
+       LIMIT ${limitNum}`,
+      queryParams
+    );
+
+    successResponse(res, '인기 상담사 조회 완료', {
+      consultants,
+      count: consultants.length,
+      filters: {
+        consultation_field,
+        limit: limitNum
+      }
+    });
+
+  } catch (error) {
+    console.error('인기 상담사 조회 에러:', error);
+    errorResponse(
+      res,
+      '인기 상담사 조회 중 오류가 발생했습니다.',
+      RESPONSE_CODES.DATABASE_ERROR,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
+  }
+});
+
+/**
+ * GET /api/consultants/events
+ * 이벤트 선정 상담사 (event_selected=1)
+ */
+router.get('/events', optionalAuth, validatePagination, async (req, res) => {
+  try {
+    const {
+      consultation_field = null,
+      limit = 20
+    } = req.query;
+
+    // WHERE 조건 구성
+    let whereConditions = ['c.status = "active"', 'c.event_selected = 1'];
+    let queryParams = [];
+
+    if (consultation_field) {
+      whereConditions.push('c.consultation_field = ?');
+      queryParams.push(consultation_field);
+    }
+
+    const whereClause = whereConditions.join(' AND ');
+    const limitNum = Math.min(parseInt(limit) || 20, 100);
+
+    // 이벤트 선정 상담사 조회
+    const [consultants] = await pool.execute(
+      `SELECT c.id, c.consultant_number, c.name, c.stage_name, c.profile_image,
+       c.consultation_field, c.consultant_grade, c.consultation_rate,
+       c.consultation_hours, c.consultation_fee, c.introduction,
+       c.event_selected, c.ring_expert, c.shorts_connected
+       FROM consultants c
+       LEFT JOIN users u ON c.user_id = u.id
+       WHERE ${whereClause}
+       ORDER BY c.consultation_rate DESC, c.consultation_hours DESC
+       LIMIT ${limitNum}`,
+      queryParams
+    );
+
+    successResponse(res, '이벤트 선정 상담사 조회 완료', {
+      consultants,
+      count: consultants.length,
+      filters: {
+        consultation_field,
+        limit: limitNum
+      }
+    });
+
+  } catch (error) {
+    console.error('이벤트 선정 상담사 조회 에러:', error);
+    errorResponse(
+      res,
+      '이벤트 선정 상담사 조회 중 오류가 발생했습니다.',
+      RESPONSE_CODES.DATABASE_ERROR,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
+  }
+});
+
 module.exports = router;
