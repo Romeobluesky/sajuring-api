@@ -11,6 +11,7 @@ const ringRoutes = require('./routes/rings');
 const faqRoutes = require('./routes/faq');
 const inquiryRoutes = require('./routes/inquiries');
 const eventRoutes = require('./routes/events');
+const headerBannerRoutes = require('./routes/header-banners');
 const testRoutes = require('./routes/test');
 
 const app = express();
@@ -64,6 +65,7 @@ app.use('/api/rings', ringRoutes);
 app.use('/api/faq', faqRoutes);
 app.use('/api/inquiries', inquiryRoutes);
 app.use('/api/events', eventRoutes);
+app.use('/api/header-banners', headerBannerRoutes);
 app.use('/api/test', testRoutes);
 
 // 404 에러 핸들러
@@ -122,7 +124,8 @@ const startServer = async () => {
         console.log('   POST /api/rings/transfer - 링 전송');
         console.log('   GET  /api/faq - FAQ 목록');
         console.log('   POST /api/inquiries - 문의사항 등록');
-        console.log('   GET  /api/events - 이벤트 목록\n');
+        console.log('   GET  /api/events - 이벤트 목록');
+        console.log('   GET  /api/header-banners - 헤더 배너 목록\n');
       }
     });
 
