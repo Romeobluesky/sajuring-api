@@ -77,8 +77,8 @@ router.get('/', optionalAuth, async (req, res) => {
     const consultantsWithParsedFields = consultants.map(consultant => ({
       ...consultant,
       intro_images: safeJsonParse(consultant.intro_images, []),
-      specialties: safeJsonParse(consultant.specialties, []),
-      consultation_styles: safeJsonParse(consultant.consultation_styles, [])
+      specialties: Array.isArray(consultant.specialties) ? consultant.specialties : safeJsonParse(consultant.specialties, []),
+      consultation_styles: Array.isArray(consultant.consultation_styles) ? consultant.consultation_styles : safeJsonParse(consultant.consultation_styles, [])
     }));
 
     successResponse(res, '상담사 목록 조회 완료', {
@@ -624,8 +624,8 @@ router.get('/:id', optionalAuth, validateId, async (req, res) => {
 
     // JSON 필드 파싱
     consultant.intro_images = safeJsonParse(consultant.intro_images, []);
-    consultant.specialties = safeJsonParse(consultant.specialties, []);
-    consultant.consultation_styles = safeJsonParse(consultant.consultation_styles, []);
+    consultant.specialties = Array.isArray(consultant.specialties) ? consultant.specialties : safeJsonParse(consultant.specialties, []);
+    consultant.consultation_styles = Array.isArray(consultant.consultation_styles) ? consultant.consultation_styles : safeJsonParse(consultant.consultation_styles, []);
 
     // 민감한 정보 제거 (이메일, 전화번호는 관리자나 본인만)
     const isOwner = req.user && req.user.id === consultant.user_id;
