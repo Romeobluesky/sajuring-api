@@ -60,13 +60,31 @@ router.get('/', optionalAuth, async (req, res) => {
     const whereClause = whereConditions.join(' AND ');
     const limitNum = Math.min(parseInt(limit) || 20, 100); // 최대 100개 제한
 
-    // 상담사 목록 조회
+    // 상담사 목록 조회 (상담 횟수와 리뷰 횟수 포함)
     const [consultants] = await pool.execute(
-      `SELECT id, consultant_number, name, nickname, stage_name, phone, email,
-       profile_image, intro_images, introduction, one_line_introduction, career, grade, consultant_grade,
-       consultation_field, consultation_fee, rings, consultation_rate, status,
-       specialties, consultation_styles, event_selected, ring_expert, shorts_connected, created_at, updated_at
-       FROM consultants
+      `SELECT c.id, c.consultant_number, c.name, c.nickname, c.stage_name, c.phone, c.email,
+       c.profile_image, c.intro_images, c.introduction, c.one_line_introduction, c.career, c.grade, c.consultant_grade,
+       c.consultation_field, c.consultation_fee, c.rings, c.consultation_rate, c.status,
+       c.specialties, c.consultation_styles, c.event_selected, c.ring_expert, c.shorts_connected, c.created_at, c.updated_at,
+       COALESCE(consultation_stats.consultation_count, 0) as consultation_count,
+       COALESCE(review_stats.review_count, 0) as review_count
+       FROM consultants c
+       LEFT JOIN (
+           SELECT
+               consultant_id,
+               COUNT(*) as consultation_count
+           FROM consultations
+           WHERE status = 'completed'
+           GROUP BY consultant_id
+       ) consultation_stats ON c.id = consultation_stats.consultant_id
+       LEFT JOIN (
+           SELECT
+               consultant_id,
+               COUNT(*) as review_count
+           FROM reviews
+           WHERE is_active = 1
+           GROUP BY consultant_id
+       ) review_stats ON c.id = review_stats.consultant_id
        WHERE ${whereClause}
        ORDER BY ${sortField} ${sortOrder}
        LIMIT ${limitNum}`,
@@ -133,13 +151,31 @@ router.get('/popular', optionalAuth, async (req, res) => {
     const limitNum = Math.min(parseInt(limit) || 10, 50);
 
     const [consultants] = await pool.execute(
-      `SELECT id, consultant_number, name, nickname, stage_name,
-       profile_image, introduction, one_line_introduction, grade, consultant_grade,
-       consultation_field, consultation_fee, consultation_rate, status,
-       specialties, consultation_styles, event_selected, ring_expert, shorts_connected
-       FROM consultants
+      `SELECT c.id, c.consultant_number, c.name, c.nickname, c.stage_name,
+       c.profile_image, c.introduction, c.one_line_introduction, c.grade, c.consultant_grade,
+       c.consultation_field, c.consultation_fee, c.consultation_rate, c.status,
+       c.specialties, c.consultation_styles, c.event_selected, c.ring_expert, c.shorts_connected,
+       COALESCE(consultation_stats.consultation_count, 0) as consultation_count,
+       COALESCE(review_stats.review_count, 0) as review_count
+       FROM consultants c
+       LEFT JOIN (
+           SELECT
+               consultant_id,
+               COUNT(*) as consultation_count
+           FROM consultations
+           WHERE status = 'completed'
+           GROUP BY consultant_id
+       ) consultation_stats ON c.id = consultation_stats.consultant_id
+       LEFT JOIN (
+           SELECT
+               consultant_id,
+               COUNT(*) as review_count
+           FROM reviews
+           WHERE is_active = 1
+           GROUP BY consultant_id
+       ) review_stats ON c.id = review_stats.consultant_id
        WHERE ${whereClause}
-       ORDER BY consultation_rate DESC, consultation_fee ASC
+       ORDER BY c.consultation_rate DESC, c.consultation_fee ASC
        LIMIT ${limitNum}`,
       queryParams
     );
@@ -170,13 +206,31 @@ router.get('/events', optionalAuth, async (req, res) => {
     const limitNum = Math.min(parseInt(limit) || 20, 50);
 
     const [consultants] = await pool.execute(
-      `SELECT id, consultant_number, name, nickname, stage_name,
-       profile_image, introduction, one_line_introduction, grade, consultant_grade,
-       consultation_field, consultation_fee, consultation_rate, status,
-       specialties, consultation_styles, event_selected, ring_expert, shorts_connected
-       FROM consultants
-       WHERE event_selected = 1
-       ORDER BY consultation_rate DESC
+      `SELECT c.id, c.consultant_number, c.name, c.nickname, c.stage_name,
+       c.profile_image, c.introduction, c.one_line_introduction, c.grade, c.consultant_grade,
+       c.consultation_field, c.consultation_fee, c.consultation_rate, c.status,
+       c.specialties, c.consultation_styles, c.event_selected, c.ring_expert, c.shorts_connected,
+       COALESCE(consultation_stats.consultation_count, 0) as consultation_count,
+       COALESCE(review_stats.review_count, 0) as review_count
+       FROM consultants c
+       LEFT JOIN (
+           SELECT
+               consultant_id,
+               COUNT(*) as consultation_count
+           FROM consultations
+           WHERE status = 'completed'
+           GROUP BY consultant_id
+       ) consultation_stats ON c.id = consultation_stats.consultant_id
+       LEFT JOIN (
+           SELECT
+               consultant_id,
+               COUNT(*) as review_count
+           FROM reviews
+           WHERE is_active = 1
+           GROUP BY consultant_id
+       ) review_stats ON c.id = review_stats.consultant_id
+       WHERE c.event_selected = 1
+       ORDER BY c.consultation_rate DESC
        LIMIT ${limitNum}`
     );
 
@@ -604,9 +658,26 @@ router.get('/:id', optionalAuth, validateId, async (req, res) => {
     const consultantId = req.params.id;
 
     const [consultants] = await pool.execute(
-      `SELECT c.*, u.username, u.email, u.status as user_status
+      `SELECT c.*,
+       COALESCE(consultation_stats.consultation_count, 0) as consultation_count,
+       COALESCE(review_stats.review_count, 0) as review_count
        FROM consultants c
-       LEFT JOIN users u ON c.user_id = u.id
+       LEFT JOIN (
+           SELECT
+               consultant_id,
+               COUNT(*) as consultation_count
+           FROM consultations
+           WHERE status = 'completed'
+           GROUP BY consultant_id
+       ) consultation_stats ON c.id = consultation_stats.consultant_id
+       LEFT JOIN (
+           SELECT
+               consultant_id,
+               COUNT(*) as review_count
+           FROM reviews
+           WHERE is_active = 1
+           GROUP BY consultant_id
+       ) review_stats ON c.id = review_stats.consultant_id
        WHERE c.id = ?`,
       [consultantId]
     );
@@ -635,7 +706,6 @@ router.get('/:id', optionalAuth, validateId, async (req, res) => {
       delete consultant.email;
       delete consultant.phone;
       delete consultant.user_id;
-      delete consultant.username;
     }
 
     successResponse(res, '상담사 정보 조회 완료', {
@@ -694,13 +764,31 @@ router.get('/field/:field', optionalAuth, async (req, res) => {
     const sortOrder = order === 'asc' ? 'ASC' : 'DESC';
     const limitNum = Math.min(parseInt(limit) || 20, 100);
 
-    // 상담사 목록 조회
+    // 상담사 목록 조회 (상담 횟수와 리뷰 횟수 포함)
     const [consultants] = await pool.execute(
-      `SELECT id, consultant_number, name, nickname, stage_name,
-       profile_image, introduction, one_line_introduction, grade, consultant_grade,
-       consultation_field, consultation_fee, consultation_rate, status,
-       specialties, consultation_styles, event_selected, ring_expert, shorts_connected
-       FROM consultants
+      `SELECT c.id, c.consultant_number, c.name, c.nickname, c.stage_name,
+       c.profile_image, c.introduction, c.one_line_introduction, c.grade, c.consultant_grade,
+       c.consultation_field, c.consultation_fee, c.consultation_rate, c.status,
+       c.specialties, c.consultation_styles, c.event_selected, c.ring_expert, c.shorts_connected,
+       COALESCE(consultation_stats.consultation_count, 0) as consultation_count,
+       COALESCE(review_stats.review_count, 0) as review_count
+       FROM consultants c
+       LEFT JOIN (
+           SELECT
+               consultant_id,
+               COUNT(*) as consultation_count
+           FROM consultations
+           WHERE status = 'completed'
+           GROUP BY consultant_id
+       ) consultation_stats ON c.id = consultation_stats.consultant_id
+       LEFT JOIN (
+           SELECT
+               consultant_id,
+               COUNT(*) as review_count
+           FROM reviews
+           WHERE is_active = 1
+           GROUP BY consultant_id
+       ) review_stats ON c.id = review_stats.consultant_id
        WHERE ${whereClause}
        ORDER BY ${sortField} ${sortOrder}
        LIMIT ${limitNum}`,
@@ -784,11 +872,28 @@ router.get('/search', optionalAuth, validatePagination, async (req, res) => {
     const limitNum = Math.min(parseInt(limit) || 20, 100);
     const offset = (page - 1) * limitNum;
 
-    // 상담사 검색
+    // 상담사 검색 (상담 횟수와 리뷰 횟수 포함)
     const [consultants] = await pool.execute(
-      `SELECT c.*, u.username, u.email, u.status as user_status
+      `SELECT c.*,
+       COALESCE(consultation_stats.consultation_count, 0) as consultation_count,
+       COALESCE(review_stats.review_count, 0) as review_count
        FROM consultants c
-       LEFT JOIN users u ON c.user_id = u.id
+       LEFT JOIN (
+           SELECT
+               consultant_id,
+               COUNT(*) as consultation_count
+           FROM consultations
+           WHERE status = 'completed'
+           GROUP BY consultant_id
+       ) consultation_stats ON c.id = consultation_stats.consultant_id
+       LEFT JOIN (
+           SELECT
+               consultant_id,
+               COUNT(*) as review_count
+           FROM reviews
+           WHERE is_active = 1
+           GROUP BY consultant_id
+       ) review_stats ON c.id = review_stats.consultant_id
        WHERE ${whereClause}
        ORDER BY c.consultation_rate DESC, c.consultation_hours DESC
        LIMIT ${limitNum} OFFSET ${offset}`,
