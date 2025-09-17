@@ -65,7 +65,7 @@ router.get('/', optionalAuth, async (req, res) => {
       `SELECT id, consultant_number, name, nickname, stage_name, phone, email,
        profile_image, intro_images, introduction, one_line_introduction, career, grade, consultant_grade,
        consultation_field, consultation_fee, rings, consultation_rate, status,
-       event_selected, ring_expert, shorts_connected, created_at, updated_at
+       specialties, consultation_styles, event_selected, ring_expert, shorts_connected, created_at, updated_at
        FROM consultants
        WHERE ${whereClause}
        ORDER BY ${sortField} ${sortOrder}
@@ -73,14 +73,16 @@ router.get('/', optionalAuth, async (req, res) => {
       queryParams
     );
 
-    // intro_images JSON 파싱
-    const consultantsWithParsedImages = consultants.map(consultant => ({
+    // JSON 필드 파싱
+    const consultantsWithParsedFields = consultants.map(consultant => ({
       ...consultant,
-      intro_images: safeJsonParse(consultant.intro_images, [])
+      intro_images: safeJsonParse(consultant.intro_images, []),
+      specialties: safeJsonParse(consultant.specialties, []),
+      consultation_styles: safeJsonParse(consultant.consultation_styles, [])
     }));
 
     successResponse(res, '상담사 목록 조회 완료', {
-      consultants: consultantsWithParsedImages,
+      consultants: consultantsWithParsedFields,
       count: consultants.length,
       filters: {
         field: fieldValue,
@@ -134,7 +136,7 @@ router.get('/popular', optionalAuth, async (req, res) => {
       `SELECT id, consultant_number, name, nickname, stage_name,
        profile_image, introduction, one_line_introduction, grade, consultant_grade,
        consultation_field, consultation_fee, consultation_rate, status,
-       event_selected, ring_expert, shorts_connected
+       specialties, consultation_styles, event_selected, ring_expert, shorts_connected
        FROM consultants
        WHERE ${whereClause}
        ORDER BY consultation_rate DESC, consultation_fee ASC
@@ -171,7 +173,7 @@ router.get('/events', optionalAuth, async (req, res) => {
       `SELECT id, consultant_number, name, nickname, stage_name,
        profile_image, introduction, one_line_introduction, grade, consultant_grade,
        consultation_field, consultation_fee, consultation_rate, status,
-       event_selected, ring_expert, shorts_connected
+       specialties, consultation_styles, event_selected, ring_expert, shorts_connected
        FROM consultants
        WHERE event_selected = 1
        ORDER BY consultation_rate DESC
@@ -620,8 +622,10 @@ router.get('/:id', optionalAuth, validateId, async (req, res) => {
 
     const consultant = consultants[0];
 
-    // intro_images JSON 파싱
+    // JSON 필드 파싱
     consultant.intro_images = safeJsonParse(consultant.intro_images, []);
+    consultant.specialties = safeJsonParse(consultant.specialties, []);
+    consultant.consultation_styles = safeJsonParse(consultant.consultation_styles, []);
 
     // 민감한 정보 제거 (이메일, 전화번호는 관리자나 본인만)
     const isOwner = req.user && req.user.id === consultant.user_id;
@@ -695,7 +699,7 @@ router.get('/field/:field', optionalAuth, async (req, res) => {
       `SELECT id, consultant_number, name, nickname, stage_name,
        profile_image, introduction, one_line_introduction, grade, consultant_grade,
        consultation_field, consultation_fee, consultation_rate, status,
-       event_selected, ring_expert, shorts_connected
+       specialties, consultation_styles, event_selected, ring_expert, shorts_connected
        FROM consultants
        WHERE ${whereClause}
        ORDER BY ${sortField} ${sortOrder}
@@ -852,7 +856,8 @@ router.get('/popular', optionalAuth, validatePagination, async (req, res) => {
     const [consultants] = await pool.execute(
       `SELECT c.id, c.consultant_number, c.name, c.stage_name, c.profile_image,
        c.consultation_field, c.consultant_grade, c.consultation_rate,
-       c.consultation_hours, c.consultation_fee, c.introduction, c.one_line_introduction, c.status
+       c.consultation_hours, c.consultation_fee, c.introduction, c.one_line_introduction, c.status,
+       c.specialties, c.consultation_styles
        FROM consultants c
        LEFT JOIN users u ON c.user_id = u.id
        WHERE ${whereClause} AND c.consultation_rate > 0
@@ -909,7 +914,7 @@ router.get('/events', optionalAuth, validatePagination, async (req, res) => {
       `SELECT c.id, c.consultant_number, c.name, c.stage_name, c.profile_image,
        c.consultation_field, c.consultant_grade, c.consultation_rate,
        c.consultation_hours, c.consultation_fee, c.introduction, c.one_line_introduction, c.status,
-       c.event_selected, c.ring_expert, c.shorts_connected
+       c.specialties, c.consultation_styles, c.event_selected, c.ring_expert, c.shorts_connected
        FROM consultants c
        LEFT JOIN users u ON c.user_id = u.id
        WHERE ${whereClause}
