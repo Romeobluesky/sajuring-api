@@ -9,7 +9,7 @@ const router = express.Router();
  * GET /api/specialties
  * 전문분야 목록 조회
  */
-router.get('/', async (req, res) => {
+router.get('/specialties', async (req, res) => {
   try {
     const [specialties] = await pool.execute(
       'SELECT * FROM specialties WHERE is_active = 1 ORDER BY display_order ASC, id ASC'
@@ -37,6 +37,7 @@ router.get('/', async (req, res) => {
  */
 router.get('/consultation-styles', async (req, res) => {
   try {
+    console.log('*** consultation-styles 핸들러가 호출되었습니다 ***');
     const [consultationStyles] = await pool.execute(
       'SELECT * FROM consultation_styles WHERE is_active = 1 ORDER BY display_order ASC, id ASC'
     );

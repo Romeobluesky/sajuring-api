@@ -68,8 +68,7 @@ app.get('/health', (req, res) => {
 // API 라우트 설정
 app.use('/api/auth', authRoutes);
 app.use('/api/consultants', consultantRoutes);
-app.use('/api/specialties', specialtiesRoutes);
-app.use('/api/consultation-styles', specialtiesRoutes);
+app.use('/api', specialtiesRoutes);
 app.use('/api/rings', ringRoutes);
 app.use('/api/consultations', consultationsRoutes);
 app.use('/api/settlements', settlementsRoutes);
@@ -175,4 +174,5 @@ process.on('uncaughtException', (error) => {
 // 서버 시작
 startServer();
 
-module.exports = app;
+module.exports = app; 
+ 
