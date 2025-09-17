@@ -46,9 +46,9 @@ router.get('/', optionalAuth, async (req, res) => {
     }
 
     if (search) {
-      whereConditions.push('(name LIKE ? OR nickname LIKE ? OR stage_name LIKE ? OR introduction LIKE ?)');
+      whereConditions.push('(name LIKE ? OR nickname LIKE ? OR stage_name LIKE ? OR introduction LIKE ? OR one_line_introduction LIKE ?)');
       const searchPattern = `%${search}%`;
-      queryParams.push(searchPattern, searchPattern, searchPattern, searchPattern);
+      queryParams.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
     }
 
     // ORDER BY 조건 (안전한 정렬)
@@ -63,10 +63,10 @@ router.get('/', optionalAuth, async (req, res) => {
     // 상담사 목록 조회
     const [consultants] = await pool.execute(
       `SELECT id, consultant_number, name, nickname, stage_name, phone, email,
-       profile_image, intro_images, introduction, career, grade, consultant_grade,
+       profile_image, intro_images, introduction, one_line_introduction, career, grade, consultant_grade,
        consultation_field, consultation_fee, rings, consultation_rate,
        event_selected, ring_expert, shorts_connected, created_at, updated_at
-       FROM consultants 
+       FROM consultants
        WHERE ${whereClause}
        ORDER BY ${sortField} ${sortOrder}
        LIMIT ${limitNum}`,
@@ -132,10 +132,10 @@ router.get('/popular', optionalAuth, async (req, res) => {
 
     const [consultants] = await pool.execute(
       `SELECT id, consultant_number, name, nickname, stage_name,
-       profile_image, introduction, grade, consultant_grade,
+       profile_image, introduction, one_line_introduction, grade, consultant_grade,
        consultation_field, consultation_fee, consultation_rate,
        event_selected, ring_expert, shorts_connected
-       FROM consultants 
+       FROM consultants
        WHERE ${whereClause}
        ORDER BY consultation_rate DESC, consultation_fee ASC
        LIMIT ${limitNum}`,
@@ -169,10 +169,10 @@ router.get('/events', optionalAuth, async (req, res) => {
 
     const [consultants] = await pool.execute(
       `SELECT id, consultant_number, name, nickname, stage_name,
-       profile_image, introduction, grade, consultant_grade,
+       profile_image, introduction, one_line_introduction, grade, consultant_grade,
        consultation_field, consultation_fee, consultation_rate,
        event_selected, ring_expert, shorts_connected
-       FROM consultants 
+       FROM consultants
        WHERE event_selected = 1
        ORDER BY consultation_rate DESC
        LIMIT ${limitNum}`
@@ -693,10 +693,10 @@ router.get('/field/:field', optionalAuth, async (req, res) => {
     // 상담사 목록 조회
     const [consultants] = await pool.execute(
       `SELECT id, consultant_number, name, nickname, stage_name,
-       profile_image, introduction, grade, consultant_grade,
+       profile_image, introduction, one_line_introduction, grade, consultant_grade,
        consultation_field, consultation_fee, consultation_rate,
        event_selected, ring_expert, shorts_connected
-       FROM consultants 
+       FROM consultants
        WHERE ${whereClause}
        ORDER BY ${sortField} ${sortOrder}
        LIMIT ${limitNum}`,
@@ -742,9 +742,9 @@ router.get('/search', optionalAuth, validatePagination, async (req, res) => {
     let queryParams = [];
 
     if (keyword) {
-      whereConditions.push('(c.name LIKE ? OR c.stage_name LIKE ? OR c.introduction LIKE ?)');
+      whereConditions.push('(c.name LIKE ? OR c.stage_name LIKE ? OR c.introduction LIKE ? OR c.one_line_introduction LIKE ?)');
       const keywordPattern = `%${keyword}%`;
-      queryParams.push(keywordPattern, keywordPattern, keywordPattern);
+      queryParams.push(keywordPattern, keywordPattern, keywordPattern, keywordPattern);
     }
 
     if (consultation_field) {
@@ -852,7 +852,7 @@ router.get('/popular', optionalAuth, validatePagination, async (req, res) => {
     const [consultants] = await pool.execute(
       `SELECT c.id, c.consultant_number, c.name, c.stage_name, c.profile_image,
        c.consultation_field, c.consultant_grade, c.consultation_rate,
-       c.consultation_hours, c.consultation_fee, c.introduction
+       c.consultation_hours, c.consultation_fee, c.introduction, c.one_line_introduction
        FROM consultants c
        LEFT JOIN users u ON c.user_id = u.id
        WHERE ${whereClause} AND c.consultation_rate > 0
@@ -908,7 +908,7 @@ router.get('/events', optionalAuth, validatePagination, async (req, res) => {
     const [consultants] = await pool.execute(
       `SELECT c.id, c.consultant_number, c.name, c.stage_name, c.profile_image,
        c.consultation_field, c.consultant_grade, c.consultation_rate,
-       c.consultation_hours, c.consultation_fee, c.introduction,
+       c.consultation_hours, c.consultation_fee, c.introduction, c.one_line_introduction,
        c.event_selected, c.ring_expert, c.shorts_connected
        FROM consultants c
        LEFT JOIN users u ON c.user_id = u.id
