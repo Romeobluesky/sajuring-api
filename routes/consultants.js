@@ -64,7 +64,7 @@ router.get('/', optionalAuth, async (req, res) => {
     const [consultants] = await pool.execute(
       `SELECT id, consultant_number, name, nickname, stage_name, phone, email,
        profile_image, intro_images, introduction, one_line_introduction, career, grade, consultant_grade,
-       consultation_field, consultation_fee, rings, consultation_rate,
+       consultation_field, consultation_fee, rings, consultation_rate, status,
        event_selected, ring_expert, shorts_connected, created_at, updated_at
        FROM consultants
        WHERE ${whereClause}
@@ -133,7 +133,7 @@ router.get('/popular', optionalAuth, async (req, res) => {
     const [consultants] = await pool.execute(
       `SELECT id, consultant_number, name, nickname, stage_name,
        profile_image, introduction, one_line_introduction, grade, consultant_grade,
-       consultation_field, consultation_fee, consultation_rate,
+       consultation_field, consultation_fee, consultation_rate, status,
        event_selected, ring_expert, shorts_connected
        FROM consultants
        WHERE ${whereClause}
@@ -170,7 +170,7 @@ router.get('/events', optionalAuth, async (req, res) => {
     const [consultants] = await pool.execute(
       `SELECT id, consultant_number, name, nickname, stage_name,
        profile_image, introduction, one_line_introduction, grade, consultant_grade,
-       consultation_field, consultation_fee, consultation_rate,
+       consultation_field, consultation_fee, consultation_rate, status,
        event_selected, ring_expert, shorts_connected
        FROM consultants
        WHERE event_selected = 1
@@ -694,7 +694,7 @@ router.get('/field/:field', optionalAuth, async (req, res) => {
     const [consultants] = await pool.execute(
       `SELECT id, consultant_number, name, nickname, stage_name,
        profile_image, introduction, one_line_introduction, grade, consultant_grade,
-       consultation_field, consultation_fee, consultation_rate,
+       consultation_field, consultation_fee, consultation_rate, status,
        event_selected, ring_expert, shorts_connected
        FROM consultants
        WHERE ${whereClause}
@@ -852,7 +852,7 @@ router.get('/popular', optionalAuth, validatePagination, async (req, res) => {
     const [consultants] = await pool.execute(
       `SELECT c.id, c.consultant_number, c.name, c.stage_name, c.profile_image,
        c.consultation_field, c.consultant_grade, c.consultation_rate,
-       c.consultation_hours, c.consultation_fee, c.introduction, c.one_line_introduction
+       c.consultation_hours, c.consultation_fee, c.introduction, c.one_line_introduction, c.status
        FROM consultants c
        LEFT JOIN users u ON c.user_id = u.id
        WHERE ${whereClause} AND c.consultation_rate > 0
@@ -908,7 +908,7 @@ router.get('/events', optionalAuth, validatePagination, async (req, res) => {
     const [consultants] = await pool.execute(
       `SELECT c.id, c.consultant_number, c.name, c.stage_name, c.profile_image,
        c.consultation_field, c.consultant_grade, c.consultation_rate,
-       c.consultation_hours, c.consultation_fee, c.introduction, c.one_line_introduction,
+       c.consultation_hours, c.consultation_fee, c.introduction, c.one_line_introduction, c.status,
        c.event_selected, c.ring_expert, c.shorts_connected
        FROM consultants c
        LEFT JOIN users u ON c.user_id = u.id
