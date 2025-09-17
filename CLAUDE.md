@@ -14,18 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Security**: bcryptjs 비밀번호 해싱
 - **CORS**: Flutter 앱과의 통신
 
-## Database Configuration
-
-```javascript
-// config/database.js
-const dbConfig = {
-  host: '1.234.2.37',
-  port: 3306,
-  database: 'sajuring_db',
-  user: 'sajuring2025',
-  password: '!@#sajuring2025'
-};
-```
+## Database Configuration 보안상 생략
 
 ## Key Database Tables
 
@@ -93,9 +82,11 @@ sajuring-api/
 - GET /api/auth/me - 내 정보 조회
 
 ### Consultants
-- GET /api/consultants - 상담사 목록 (전문분야/스타일 필터링 지원)
-- GET /api/consultants/:id - 상담사 상세 정보
-- GET /api/consultants/search - 검색 및 필터
+- GET /api/consultants - 상담사 목록 (전문분야/스타일 필터링 지원, consultation_count/review_count 포함)
+- GET /api/consultants/popular - 인기 상담사 목록 (consultation_count/review_count 포함)
+- GET /api/consultants/:id - 상담사 상세 정보 (consultation_count/review_count 포함)
+- GET /api/consultants/search - 검색 및 필터 (consultation_count/review_count 포함)
+- GET /api/consultants/field/:field - 전문분야별 상담사 조회 (consultation_count/review_count 포함)
 - GET /api/specialties - 전문분야 목록
 - GET /api/consultation-styles - 상담스타일 목록
 
@@ -183,3 +174,50 @@ NODE_ENV=development
 - MySQL Connection Pool 사용
 - JSON 필드의 적절한 파싱 및 검증
 - 기존 운영중인 관리자 페이지와 호환성 유지
+
+## Database Relations & JOIN Updates
+
+### 2025-09-17 업데이트: consultation_count 및 review_count 추가
+
+**변경 사항**:
+- 모든 상담사 조회 API에 `consultation_count`와 `review_count` 필드 추가
+- 한 번의 API 호출로 상담 횟수와 리뷰 횟수를 함께 조회 가능
+- users 테이블 JOIN 제거 (Flutter 앱에서 불필요)
+
+**JOIN 관계**:
+```sql
+-- consultations 테이블과의 JOIN
+consultants.consultant_number = consultations.consultant_id
+WHERE consultations.status = '완료'
+
+-- reviews 테이블과의 JOIN
+consultants.consultant_number = reviews.consultant_number
+```
+
+**적용된 엔드포인트**:
+- GET /api/consultants (기본 목록)
+- GET /api/consultants/popular (인기 상담사)
+- GET /api/consultants/events (이벤트 선정 상담사)
+- GET /api/consultants/field/:field (전문분야별)
+- GET /api/consultants/:id (상세 조회)
+- GET /api/consultants/search (검색)
+
+**응답 예시**:
+```json
+{
+  "success": true,
+  "data": {
+    "consultants": [
+      {
+        "id": 1,
+        "consultant_number": "C001",
+        "name": "홍길동",
+        "stage_name": "타로마스터",
+        "consultation_count": 150,
+        "review_count": 45,
+        // ... 기타 필드들
+      }
+    ]
+  }
+}
+```

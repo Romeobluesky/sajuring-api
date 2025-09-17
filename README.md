@@ -100,8 +100,11 @@ sajuring-api/
 - `GET /api/auth/me` - 내 정보 조회
 
 ### 상담사 (Consultants)
-- `GET /api/consultants` - 상담사 목록 (필터링 지원)
-- `GET /api/consultants/:id` - 상담사 상세 정보
+- `GET /api/consultants` - 상담사 목록 (필터링 지원, consultation_count/review_count 포함)
+- `GET /api/consultants/popular` - 인기 상담사 목록 (consultation_count/review_count 포함)
+- `GET /api/consultants/:id` - 상담사 상세 정보 (consultation_count/review_count 포함)
+- `GET /api/consultants/search` - 상담사 검색 (consultation_count/review_count 포함)
+- `GET /api/consultants/field/:field` - 전문분야별 상담사 조회 (consultation_count/review_count 포함)
 - `GET /api/specialties` - 전문분야 목록
 
 ### 링 시스템 (Point System)
