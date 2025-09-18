@@ -113,6 +113,10 @@ router.get('/users-event/:id', optionalAuth, validateId, async (req, res) => {
     event.consultant_list = safeJsonParse(event.consultant_list, []);
     event.guest_list = safeJsonParse(event.guest_list, []);
 
+    // consultant_list에 상담사 정보가 포함되어 있음을 명시
+    // 구조: [{"id": "9", "name": "신연서", "nickname": "연화", "consultant_number": "008"}, ...]
+    event.consultant_count = event.consultant_list.length;
+
     // 이벤트 상태 확인
     const now = new Date();
     const startDate = new Date(event.start_date);

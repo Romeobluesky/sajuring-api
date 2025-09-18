@@ -281,16 +281,22 @@ router.get('/consultant-events', optionalAuth, validatePagination, async (req, r
     const limitNum = Math.min(parseInt(limit) || 20, 100);
     const offset = (page - 1) * limitNum;
 
-    // 메인 배너 이벤트 목록 조회
+    // 메인 배너 이벤트 목록 조회 (consultant_list 포함)
     const [events] = await pool.execute(
       `SELECT id, event_title, event_context, image_web_src, image_mobile_src,
-       start_date, end_date, event_type, event_state, event_count, event_index, update_At
+       start_date, end_date, event_type, event_state, consultant_list,
+       event_count, event_index, update_At
        FROM consultants_event
        WHERE ${whereClause}
        ORDER BY event_index ASC, start_date DESC
        LIMIT ${limitNum} OFFSET ${offset}`,
       queryParams
     );
+
+    // consultant_list JSON 파싱
+    events.forEach(event => {
+      event.consultant_list = safeJsonParse(event.consultant_list, []);
+    });
 
     // 전체 개수 조회
     const [countResult] = await pool.execute(
@@ -405,6 +411,10 @@ router.get('/consultant-events/:id', optionalAuth, validateId, async (req, res) 
     // JSON 필드 파싱
     event.consultant_list = safeJsonParse(event.consultant_list, []);
     event.guest_list = safeJsonParse(event.guest_list, []);
+
+    // consultant_list에 상담사 정보가 포함되어 있음을 명시
+    // 구조: [{"id": "9", "name": "신연서", "nickname": "연화", "consultant_number": "008"}, ...]
+    event.consultant_count = event.consultant_list.length;
 
     // 이벤트 상태 확인
     const now = new Date();
