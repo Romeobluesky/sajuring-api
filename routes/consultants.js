@@ -418,6 +418,54 @@ router.get('/consultant-events/:id', optionalAuth, validateId, async (req, res) 
     // 구조: [{"id": "9", "name": "신연서", "nickname": "연화", "consultant_number": "008"}, ...]
     event.consultant_count = event.consultant_list.length;
 
+    // consultant_list의 id로 consultants 테이블에서 상담사 상세 정보 조회
+    let consultantDetails = [];
+    if (event.consultant_list.length > 0) {
+      const consultantIds = event.consultant_list.map(consultant => consultant.id);
+      const placeholders = consultantIds.map(() => '?').join(',');
+
+      const [consultants] = await pool.execute(
+        `SELECT c.id, c.consultant_number, c.name, c.nickname, c.stage_name,
+         c.profile_image, c.intro_images, c.introduction, c.one_line_introduction,
+         c.career, c.grade, c.consultant_grade, c.consultation_field, c.consultation_fee,
+         c.consultation_rate, c.status, c.specialties, c.consultation_styles,
+         c.event_selected, c.ring_expert, c.shorts_connected,
+         COALESCE(consultation_stats.consultation_count, 0) as consultation_count,
+         COALESCE(review_stats.review_count, 0) as review_count
+         FROM consultants c
+         LEFT JOIN (
+             SELECT
+                 consultant_id,
+                 COUNT(*) as consultation_count
+             FROM consultations
+             WHERE status = '완료'
+             GROUP BY consultant_id
+         ) consultation_stats ON c.consultant_number = consultation_stats.consultant_id
+         LEFT JOIN (
+             SELECT
+                 consultant_number,
+                 COUNT(*) as review_count
+             FROM reviews
+             GROUP BY consultant_number
+         ) review_stats ON c.consultant_number = review_stats.consultant_number
+         WHERE c.id IN (${placeholders})
+         ORDER BY c.consultation_rate DESC, c.created_at DESC`,
+        consultantIds
+      );
+
+      // JSON 필드 파싱
+      consultants.forEach(consultant => {
+        consultant.intro_images = safeJsonParse(consultant.intro_images, []);
+        consultant.specialties = Array.isArray(consultant.specialties) ? consultant.specialties : safeJsonParse(consultant.specialties, []);
+        consultant.consultation_styles = Array.isArray(consultant.consultation_styles) ? consultant.consultation_styles : safeJsonParse(consultant.consultation_styles, []);
+      });
+
+      consultantDetails = consultants;
+    }
+
+    // 이벤트에 상담사 상세 정보 추가
+    event.consultant_details = consultantDetails;
+
     // 이벤트 상태 확인
     const now = new Date();
     const startDate = new Date(event.start_date);
