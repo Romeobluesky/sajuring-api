@@ -293,9 +293,11 @@ router.get('/consultant-events', optionalAuth, validatePagination, async (req, r
       queryParams
     );
 
-    // consultant_list JSON 파싱
+    // consultant_list JSON 파싱 및 추가 정보 설정
     events.forEach(event => {
       event.consultant_list = safeJsonParse(event.consultant_list, []);
+      // 상담사 수 추가
+      event.consultant_count = event.consultant_list.length;
     });
 
     // 전체 개수 조회
