@@ -51,15 +51,20 @@ const createPagination = (page, limit, total) => {
 const safeJsonParse = (jsonString, defaultValue = null) => {
   try {
     if (!jsonString) return defaultValue;
-    
+
+    // 이미 객체나 배열인 경우 그대로 반환
+    if (typeof jsonString === 'object') {
+      return jsonString;
+    }
+
     // JSON 문자열이 아닌 경우 (이미지 경로 등) 빈 배열 반환
     if (typeof jsonString === 'string' && !jsonString.startsWith('[') && !jsonString.startsWith('{')) {
       return defaultValue;
     }
-    
+
     return JSON.parse(jsonString);
   } catch (error) {
-    // 파싱 에러시 기본값 반환 (에러 로그는 제거)
+    // 파싱 에러시 기본값 반환
     return defaultValue;
   }
 };
