@@ -208,7 +208,7 @@ router.get('/consultant/:id', optionalAuth, validateId, validatePagination, asyn
     // 후기 목록 조회
     const [reviews] = await pool.execute(
       `SELECT id, customer_name, consultation_type, consultation_method, review_content,
-       review_rating, consultation_date, created_at, consultant_comment, comment_date
+       review_rating, consultation_date, created_at, consultant_comment, comment_date, is_best
        FROM reviews
        WHERE consultant_number = ?
        ORDER BY created_at DESC
