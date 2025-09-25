@@ -16,7 +16,7 @@ const router = express.Router();
  */
 router.post('/register', validateRegister, async (req, res) => {
   try {
-    const { login_id, email, password, nickname, phone, birth_date, gender } = req.body;
+    const { login_id, username, email, password, nickname, phone, birth_date, gender } = req.body;
 
     // 중복 확인 (login_id, email, nickname)
     const [existingUsers] = await pool.execute(
@@ -46,11 +46,12 @@ router.post('/register', validateRegister, async (req, res) => {
 
     // 사용자 생성
     const [result] = await pool.execute(
-      `INSERT INTO users (login_id, email, password, nickname, phone, birth_date, gender,
+      `INSERT INTO users (login_id, username, email, password, nickname, phone, birth_date, gender,
        rings, role, status, policy, role_level, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 1, 1, NOW(), NOW())`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 1, 1, NOW(), NOW())`,
       [
         login_id,
+        username,
         email,
         hashedPassword,
         nickname,
@@ -66,7 +67,7 @@ router.post('/register', validateRegister, async (req, res) => {
 
     // JWT 토큰 생성
     const token = jwt.sign(
-      { userId, login_id, email, role: USER_ROLES.USER },
+      { userId, login_id, username, email, role: USER_ROLES.USER },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN }
     );
@@ -75,6 +76,7 @@ router.post('/register', validateRegister, async (req, res) => {
       user: {
         id: userId,
         login_id,
+        username,
         email,
         nickname,
         role: USER_ROLES.USER,
@@ -126,7 +128,7 @@ router.post('/login', (req, res, next) => {
 
     // 사용자 조회 (login_id 또는 email)
     const [users] = await pool.execute(
-      'SELECT id, login_id, email, password, nickname, role, status, rings, role_level FROM users WHERE (login_id = ? OR email = ?) AND status = ?',
+      'SELECT id, login_id, username, email, password, nickname, role, status, rings, role_level FROM users WHERE (login_id = ? OR email = ?) AND status = ?',
       [userEmail, userEmail, USER_STATUS.ACTIVE]
     );
 
@@ -158,6 +160,7 @@ router.post('/login', (req, res, next) => {
       {
         userId: user.id,
         login_id: user.login_id,
+        username: user.username,
         email: user.email,
         role: user.role
       },
@@ -175,6 +178,7 @@ router.post('/login', (req, res, next) => {
       user: {
         id: user.id,
         login_id: user.login_id,
+        username: user.username,
         email: user.email,
         nickname: user.nickname,
         role: user.role,
@@ -370,7 +374,7 @@ router.get('/me', authenticateToken, async (req, res) => {
     const userId = req.user.id;
 
     const [users] = await pool.execute(
-      `SELECT id, login_id, email, nickname, phone, birth_date, gender,
+      `SELECT id, login_id, username, email, nickname, phone, birth_date, gender,
        profile_image, rings, role, status, role_level, created_at, updated_at
        FROM users WHERE id = ?`,
       [userId]
@@ -406,6 +410,7 @@ router.get('/me', authenticateToken, async (req, res) => {
       user: {
         id: user.id,
         login_id: user.login_id,
+        username: user.username,
         email: user.email,
         nickname: user.nickname,
         phone: user.phone,
@@ -482,7 +487,7 @@ router.put('/profile', authenticateToken, validateProfileUpdate, async (req, res
 
     // 업데이트된 사용자 정보 조회
     const [users] = await pool.execute(
-      'SELECT id, login_id, email, nickname, phone, birth_date, gender, profile_image, rings, role FROM users WHERE id = ?',
+      'SELECT id, login_id, username, email, nickname, phone, birth_date, gender, profile_image, rings, role FROM users WHERE id = ?',
       [userId]
     );
 

@@ -35,6 +35,10 @@ const validateRegister = [
     .withMessage('아이디는 3-20자 사이여야 합니다.')
     .matches(/^[a-zA-Z0-9_]+$/)
     .withMessage('아이디는 영문, 숫자, 언더스코어만 허용됩니다.'),
+
+  body('username')
+    .isLength({ min: 2, max: 20 })
+    .withMessage('이름은 2-20자 사이여야 합니다.'),
     
   body('email')
     .isEmail()
