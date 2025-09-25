@@ -1,6 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { body, validationResult } = require('express-validator');
 const { pool } = require('../config/database');
 const { authenticateToken } = require('../middleware/auth');
 const { validateRegister, validateLogin, validateProfileUpdate } = require('../middleware/validation');
@@ -15,18 +16,25 @@ const router = express.Router();
  */
 router.post('/register', validateRegister, async (req, res) => {
   try {
-    const { username, email, password, nickname, phone, birth_date, gender } = req.body;
+    const { login_id, email, password, nickname, phone, birth_date, gender } = req.body;
 
-    // 중복 확인 (username, email)
+    // 중복 확인 (login_id, email, nickname)
     const [existingUsers] = await pool.execute(
-      'SELECT id FROM users WHERE username = ? OR email = ?',
-      [username, email]
+      'SELECT id, login_id, email, nickname FROM users WHERE login_id = ? OR email = ? OR nickname = ?',
+      [login_id, email, nickname]
     );
 
     if (existingUsers.length > 0) {
+      const duplicateUser = existingUsers[0];
+      let duplicateField = [];
+
+      if (duplicateUser.login_id === login_id) duplicateField.push('아이디');
+      if (duplicateUser.email === email) duplicateField.push('이메일');
+      if (duplicateUser.nickname === nickname) duplicateField.push('닉네임');
+
       return errorResponse(
         res,
-        '이미 사용중인 사용자명 또는 이메일입니다.',
+        `이미 사용중인 ${duplicateField.join(', ')}입니다.`,
         RESPONSE_CODES.DUPLICATE_ERROR,
         HTTP_STATUS.CONFLICT
       );
@@ -38,11 +46,11 @@ router.post('/register', validateRegister, async (req, res) => {
 
     // 사용자 생성
     const [result] = await pool.execute(
-      `INSERT INTO users (username, email, password, nickname, phone, birth_date, gender, 
-       rings, role, status, policy, role_level, created_at, updated_at) 
+      `INSERT INTO users (login_id, email, password, nickname, phone, birth_date, gender,
+       rings, role, status, policy, role_level, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 1, 1, NOW(), NOW())`,
       [
-        username,
+        login_id,
         email,
         hashedPassword,
         nickname,
@@ -58,7 +66,7 @@ router.post('/register', validateRegister, async (req, res) => {
 
     // JWT 토큰 생성
     const token = jwt.sign(
-      { userId, username, email, role: USER_ROLES.USER },
+      { userId, login_id, email, role: USER_ROLES.USER },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN }
     );
@@ -66,7 +74,7 @@ router.post('/register', validateRegister, async (req, res) => {
     successResponse(res, '회원가입이 완료되었습니다.', {
       user: {
         id: userId,
-        username,
+        login_id,
         email,
         nickname,
         role: USER_ROLES.USER,
@@ -100,14 +108,26 @@ router.post('/register', validateRegister, async (req, res) => {
  * POST /api/auth/login
  * 로그인 (email + password)
  */
-router.post('/login', validateLogin, async (req, res) => {
+router.post('/login', (req, res, next) => {
+  // 로그인 요청 디버깅을 위한 로깅
+  console.log('=== 로그인 요청 디버깅 ===');
+  console.log('요청 헤더:', req.headers);
+  console.log('요청 바디:', req.body);
+  console.log('Content-Type:', req.headers['content-type']);
+  console.log('=======================');
+  next();
+}, validateLogin, async (req, res) => {
   try {
-    const { loginId, password } = req.body;
+    const { loginId, email, password } = req.body;
 
-    // 사용자 조회 (email만)
+    // loginId 또는 email 필드에서 이메일 값 추출
+    const userEmail = loginId || email;
+    console.log('추출된 이메일:', userEmail);
+
+    // 사용자 조회 (login_id 또는 email)
     const [users] = await pool.execute(
-      'SELECT id, username, email, password, nickname, role, status, rings, role_level FROM users WHERE email = ? AND status = ?',
-      [loginId, USER_STATUS.ACTIVE]
+      'SELECT id, login_id, email, password, nickname, role, status, rings, role_level FROM users WHERE (login_id = ? OR email = ?) AND status = ?',
+      [userEmail, userEmail, USER_STATUS.ACTIVE]
     );
 
     if (users.length === 0) {
@@ -135,11 +155,11 @@ router.post('/login', validateLogin, async (req, res) => {
 
     // JWT 토큰 생성
     const token = jwt.sign(
-      { 
-        userId: user.id, 
-        username: user.username, 
-        email: user.email, 
-        role: user.role 
+      {
+        userId: user.id,
+        login_id: user.login_id,
+        email: user.email,
+        role: user.role
       },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN }
@@ -154,7 +174,7 @@ router.post('/login', validateLogin, async (req, res) => {
     successResponse(res, '로그인이 완료되었습니다.', {
       user: {
         id: user.id,
-        username: user.username,
+        login_id: user.login_id,
         email: user.email,
         nickname: user.nickname,
         role: user.role,
@@ -169,6 +189,162 @@ router.post('/login', validateLogin, async (req, res) => {
     errorResponse(
       res,
       '로그인 처리 중 오류가 발생했습니다.',
+      RESPONSE_CODES.DATABASE_ERROR,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
+  }
+});
+
+/**
+ * POST /api/auth/check-login-id
+ * 아이디 중복확인
+ */
+router.post('/check-login-id', [
+  body('login_id')
+    .isLength({ min: 3, max: 20 })
+    .withMessage('아이디는 3-20자 사이여야 합니다.')
+    .matches(/^[a-zA-Z0-9_]+$/)
+    .withMessage('아이디는 영문, 숫자, 언더스코어만 허용됩니다.'),
+  (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return errorResponse(
+        res,
+        errors.array()[0].msg,
+        RESPONSE_CODES.VALIDATION_ERROR,
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+    next();
+  }
+], async (req, res) => {
+  try {
+    const { login_id } = req.body;
+
+    const [users] = await pool.execute(
+      'SELECT id FROM users WHERE login_id = ?',
+      [login_id]
+    );
+
+    if (users.length > 0) {
+      return errorResponse(
+        res,
+        '이미 사용중인 아이디입니다.',
+        RESPONSE_CODES.DUPLICATE_ERROR,
+        HTTP_STATUS.CONFLICT
+      );
+    }
+
+    successResponse(res, '사용 가능한 아이디입니다.', { available: true });
+
+  } catch (error) {
+    console.error('아이디 중복확인 에러:', error);
+    errorResponse(
+      res,
+      '아이디 중복확인 중 오류가 발생했습니다.',
+      RESPONSE_CODES.DATABASE_ERROR,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
+  }
+});
+
+/**
+ * POST /api/auth/check-email
+ * 이메일 중복확인
+ */
+router.post('/check-email', [
+  body('email')
+    .isEmail()
+    .withMessage('유효한 이메일 주소를 입력해주세요.')
+    .normalizeEmail(),
+  (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return errorResponse(
+        res,
+        errors.array()[0].msg,
+        RESPONSE_CODES.VALIDATION_ERROR,
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+    next();
+  }
+], async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    const [users] = await pool.execute(
+      'SELECT id FROM users WHERE email = ?',
+      [email]
+    );
+
+    if (users.length > 0) {
+      return errorResponse(
+        res,
+        '이미 사용중인 이메일입니다.',
+        RESPONSE_CODES.DUPLICATE_ERROR,
+        HTTP_STATUS.CONFLICT
+      );
+    }
+
+    successResponse(res, '사용 가능한 이메일입니다.', { available: true });
+
+  } catch (error) {
+    console.error('이메일 중복확인 에러:', error);
+    errorResponse(
+      res,
+      '이메일 중복확인 중 오류가 발생했습니다.',
+      RESPONSE_CODES.DATABASE_ERROR,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
+  }
+});
+
+/**
+ * POST /api/auth/check-nickname
+ * 닉네임 중복확인
+ */
+router.post('/check-nickname', [
+  body('nickname')
+    .isLength({ min: 2, max: 20 })
+    .withMessage('닉네임은 2-20자 사이여야 합니다.'),
+  (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return errorResponse(
+        res,
+        errors.array()[0].msg,
+        RESPONSE_CODES.VALIDATION_ERROR,
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+    next();
+  }
+], async (req, res) => {
+  try {
+    const { nickname } = req.body;
+
+    const [users] = await pool.execute(
+      'SELECT id FROM users WHERE nickname = ?',
+      [nickname]
+    );
+
+    if (users.length > 0) {
+      return errorResponse(
+        res,
+        '이미 사용중인 닉네임입니다.',
+        RESPONSE_CODES.DUPLICATE_ERROR,
+        HTTP_STATUS.CONFLICT
+      );
+    }
+
+    successResponse(res, '사용 가능한 닉네임입니다.', { available: true });
+
+  } catch (error) {
+    console.error('닉네임 중복확인 에러:', error);
+    errorResponse(
+      res,
+      '닉네임 중복확인 중 오류가 발생했습니다.',
       RESPONSE_CODES.DATABASE_ERROR,
       HTTP_STATUS.INTERNAL_SERVER_ERROR
     );
@@ -194,8 +370,8 @@ router.get('/me', authenticateToken, async (req, res) => {
     const userId = req.user.id;
 
     const [users] = await pool.execute(
-      `SELECT id, username, email, nickname, phone, birth_date, gender, 
-       profile_image, rings, role, status, role_level, created_at, updated_at 
+      `SELECT id, login_id, email, nickname, phone, birth_date, gender,
+       profile_image, rings, role, status, role_level, created_at, updated_at
        FROM users WHERE id = ?`,
       [userId]
     );
@@ -229,7 +405,7 @@ router.get('/me', authenticateToken, async (req, res) => {
     successResponse(res, '사용자 정보 조회 완료', {
       user: {
         id: user.id,
-        username: user.username,
+        login_id: user.login_id,
         email: user.email,
         nickname: user.nickname,
         phone: user.phone,
@@ -306,7 +482,7 @@ router.put('/profile', authenticateToken, validateProfileUpdate, async (req, res
 
     // 업데이트된 사용자 정보 조회
     const [users] = await pool.execute(
-      'SELECT id, username, email, nickname, phone, birth_date, gender, profile_image, rings, role FROM users WHERE id = ?',
+      'SELECT id, login_id, email, nickname, phone, birth_date, gender, profile_image, rings, role FROM users WHERE id = ?',
       [userId]
     );
 

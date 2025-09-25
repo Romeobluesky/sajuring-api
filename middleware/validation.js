@@ -7,8 +7,13 @@ const { RESPONSE_CODES, HTTP_STATUS } = require('../utils/constants');
  */
 const handleValidationErrors = (req, res, next) => {
   const errors = validationResult(req);
-  
+
   if (!errors.isEmpty()) {
+    console.log('=== Validation 에러 디버깅 ===');
+    console.log('요청 바디:', req.body);
+    console.log('검증 에러들:', errors.array());
+    console.log('========================');
+
     const errorMessages = errors.array().map(error => error.msg);
     return errorResponse(
       res,
@@ -17,7 +22,7 @@ const handleValidationErrors = (req, res, next) => {
       HTTP_STATUS.BAD_REQUEST
     );
   }
-  
+
   next();
 };
 
@@ -25,11 +30,11 @@ const handleValidationErrors = (req, res, next) => {
  * 회원가입 유효성 검사
  */
 const validateRegister = [
-  body('username')
+  body('login_id')
     .isLength({ min: 3, max: 20 })
-    .withMessage('사용자명은 3-20자 사이여야 합니다.')
+    .withMessage('아이디는 3-20자 사이여야 합니다.')
     .matches(/^[a-zA-Z0-9_]+$/)
-    .withMessage('사용자명은 영문, 숫자, 언더스코어만 허용됩니다.'),
+    .withMessage('아이디는 영문, 숫자, 언더스코어만 허용됩니다.'),
     
   body('email')
     .isEmail()
@@ -68,9 +73,15 @@ const validateRegister = [
  * 로그인 유효성 검사
  */
 const validateLogin = [
+  // loginId 또는 email 필드 모두 지원
   body('loginId')
-    .notEmpty()
-    .withMessage('이메일을 입력해주세요.')
+    .optional()
+    .isEmail()
+    .withMessage('유효한 이메일 주소를 입력해주세요.')
+    .normalizeEmail(),
+
+  body('email')
+    .optional()
     .isEmail()
     .withMessage('유효한 이메일 주소를 입력해주세요.')
     .normalizeEmail(),
@@ -78,6 +89,15 @@ const validateLogin = [
   body('password')
     .notEmpty()
     .withMessage('비밀번호를 입력해주세요.'),
+
+  // 커스텀 검증: loginId 또는 email 중 하나는 반드시 있어야 함
+  body().custom((value, { req }) => {
+    const { loginId, email } = req.body;
+    if (!loginId && !email) {
+      throw new Error('이메일을 입력해주세요.');
+    }
+    return true;
+  }),
 
   handleValidationErrors
 ];
