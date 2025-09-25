@@ -4,7 +4,7 @@ const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
 const { pool } = require('../config/database');
 const { authenticateToken } = require('../middleware/auth');
-const { validateRegister, validateLogin, validateProfileUpdate } = require('../middleware/validation');
+const { validateRegister, validateLogin, validateChangePassword, validateProfileUpdate } = require('../middleware/validation');
 const { successResponse, errorResponse } = require('../utils/helpers');
 const { RESPONSE_CODES, HTTP_STATUS, USER_STATUS, USER_ROLES } = require('../utils/constants');
 
@@ -500,6 +500,67 @@ router.put('/profile', authenticateToken, validateProfileUpdate, async (req, res
     errorResponse(
       res,
       '프로필 수정 중 오류가 발생했습니다.',
+      RESPONSE_CODES.DATABASE_ERROR,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
+  }
+});
+
+/**
+ * PUT /api/auth/change-password
+ * 비밀번호 변경
+ */
+router.put('/change-password', authenticateToken, validateChangePassword, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { currentPassword, newPassword } = req.body;
+
+    // 현재 사용자 정보 조회
+    const [users] = await pool.execute(
+      'SELECT id, password FROM users WHERE id = ? AND status = ?',
+      [userId, USER_STATUS.ACTIVE]
+    );
+
+    if (users.length === 0) {
+      return errorResponse(
+        res,
+        '사용자를 찾을 수 없습니다.',
+        RESPONSE_CODES.NOT_FOUND,
+        HTTP_STATUS.NOT_FOUND
+      );
+    }
+
+    const user = users[0];
+
+    // 현재 비밀번호 확인
+    const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
+
+    if (!isCurrentPasswordValid) {
+      return errorResponse(
+        res,
+        '현재 비밀번호가 일치하지 않습니다.',
+        RESPONSE_CODES.AUTHENTICATION_ERROR,
+        HTTP_STATUS.UNAUTHORIZED
+      );
+    }
+
+    // 새 비밀번호 해싱
+    const saltRounds = 12;
+    const hashedNewPassword = await bcrypt.hash(newPassword, saltRounds);
+
+    // 비밀번호 업데이트
+    await pool.execute(
+      'UPDATE users SET password = ?, updated_at = NOW() WHERE id = ?',
+      [hashedNewPassword, userId]
+    );
+
+    successResponse(res, '비밀번호가 성공적으로 변경되었습니다.');
+
+  } catch (error) {
+    console.error('비밀번호 변경 에러:', error);
+    errorResponse(
+      res,
+      '비밀번호 변경 중 오류가 발생했습니다.',
       RESPONSE_CODES.DATABASE_ERROR,
       HTTP_STATUS.INTERNAL_SERVER_ERROR
     );

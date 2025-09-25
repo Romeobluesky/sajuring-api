@@ -107,6 +107,43 @@ const validateLogin = [
 ];
 
 /**
+ * 비밀번호 변경 유효성 검사
+ */
+const validateChangePassword = [
+  body('currentPassword')
+    .notEmpty()
+    .withMessage('현재 비밀번호를 입력해주세요.'),
+
+  body('newPassword')
+    .isLength({ min: 8 })
+    .withMessage('새 비밀번호는 최소 8자 이상이어야 합니다.')
+    .matches(/^(?=.*[A-Za-z])(?=.*\d)/)
+    .withMessage('새 비밀번호는 영문과 숫자를 포함해야 합니다.'),
+
+  body('confirmPassword')
+    .notEmpty()
+    .withMessage('새 비밀번호 확인을 입력해주세요.'),
+
+  // 새 비밀번호와 확인 비밀번호 일치 검사
+  body('confirmPassword').custom((confirmPassword, { req }) => {
+    if (confirmPassword !== req.body.newPassword) {
+      throw new Error('새 비밀번호와 확인 비밀번호가 일치하지 않습니다.');
+    }
+    return true;
+  }),
+
+  // 현재 비밀번호와 새 비밀번호가 같으면 안됨
+  body('newPassword').custom((newPassword, { req }) => {
+    if (newPassword === req.body.currentPassword) {
+      throw new Error('새 비밀번호는 현재 비밀번호와 달라야 합니다.');
+    }
+    return true;
+  }),
+
+  handleValidationErrors
+];
+
+/**
  * 프로필 수정 유효성 검사
  */
 const validateProfileUpdate = [
@@ -280,6 +317,7 @@ const validatePagination = [
 module.exports = {
   validateRegister,
   validateLogin,
+  validateChangePassword,
   validateProfileUpdate,
   validateConsultantSearch,
   validateId,
