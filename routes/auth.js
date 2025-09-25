@@ -98,22 +98,22 @@ router.post('/register', validateRegister, async (req, res) => {
 
 /**
  * POST /api/auth/login
- * 로그인 (username 또는 email + password)
+ * 로그인 (email + password)
  */
 router.post('/login', validateLogin, async (req, res) => {
   try {
     const { loginId, password } = req.body;
 
-    // 사용자 조회 (username 또는 email)
+    // 사용자 조회 (email만)
     const [users] = await pool.execute(
-      'SELECT id, username, email, password, nickname, role, status, rings, role_level FROM users WHERE (username = ? OR email = ?) AND status = ?',
-      [loginId, loginId, USER_STATUS.ACTIVE]
+      'SELECT id, username, email, password, nickname, role, status, rings, role_level FROM users WHERE email = ? AND status = ?',
+      [loginId, USER_STATUS.ACTIVE]
     );
 
     if (users.length === 0) {
       return errorResponse(
         res,
-        '사용자명/이메일 또는 비밀번호가 일치하지 않습니다.',
+        '이메일 또는 비밀번호가 일치하지 않습니다.',
         RESPONSE_CODES.AUTHENTICATION_ERROR,
         HTTP_STATUS.UNAUTHORIZED
       );
@@ -127,7 +127,7 @@ router.post('/login', validateLogin, async (req, res) => {
     if (!isPasswordValid) {
       return errorResponse(
         res,
-        '사용자명/이메일 또는 비밀번호가 일치하지 않습니다.',
+        '이메일 또는 비밀번호가 일치하지 않습니다.',
         RESPONSE_CODES.AUTHENTICATION_ERROR,
         HTTP_STATUS.UNAUTHORIZED
       );
