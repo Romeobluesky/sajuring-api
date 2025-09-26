@@ -303,26 +303,39 @@ router.put('/:id/status', authenticateToken, async (req, res) => {
       );
     }
 
-    // 결제 상태 변경
-    await pool.execute(
-      'UPDATE payments SET status = ? WHERE id = ?',
-      [status, paymentId]
-    );
+    // 트랜잭션으로 결제 상태 변경과 링 잔액 업데이트를 원자적으로 처리
+    const connection = await pool.getConnection();
+    await connection.beginTransaction();
 
-    // 결제 완료시 사용자 링 잔액 증가
-    if (status === 'completed' && payment.status !== 'completed') {
-      await pool.execute(
-        'UPDATE users SET rings = rings + ? WHERE id = ?',
-        [payment.charge_amount, payment.user_id]
+    try {
+      // 결제 상태 변경
+      await connection.execute(
+        'UPDATE payments SET status = ? WHERE id = ?',
+        [status, paymentId]
       );
-    }
 
-    // 결제 취소시 사용자 링 잔액 차감 (이미 완료된 결제가 취소되는 경우)
-    if (status === 'cancelled' && payment.status === 'completed') {
-      await pool.execute(
-        'UPDATE users SET rings = GREATEST(rings - ?, 0) WHERE id = ?',
-        [payment.charge_amount, payment.user_id]
-      );
+      // 결제 완료시 사용자 링 잔액 증가
+      if (status === 'completed' && payment.status !== 'completed') {
+        await connection.execute(
+          'UPDATE users SET rings = rings + ? WHERE id = ?',
+          [payment.charge_amount, payment.user_id]
+        );
+      }
+
+      // 결제 취소시 사용자 링 잔액 차감 (이미 완료된 결제가 취소되는 경우)
+      if (status === 'cancelled' && payment.status === 'completed') {
+        await connection.execute(
+          'UPDATE users SET rings = GREATEST(rings - ?, 0) WHERE id = ?',
+          [payment.charge_amount, payment.user_id]
+        );
+      }
+
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
     }
 
     successResponse(res, '결제 상태가 변경되었습니다.', {

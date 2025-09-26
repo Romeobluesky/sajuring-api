@@ -350,6 +350,84 @@ router.get('/history', authenticateToken, validatePagination, async (req, res) =
 });
 
 /**
+ * GET /api/rings/verify-balance
+ * 데이터 정합성 검증 (관리자용)
+ */
+router.get('/verify-balance', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const isAdmin = req.user.role === 'ADMIN' || req.user.role_level >= 8;
+
+    if (!isAdmin) {
+      return errorResponse(
+        res,
+        '관리자 권한이 필요합니다.',
+        RESPONSE_CODES.FORBIDDEN,
+        HTTP_STATUS.FORBIDDEN
+      );
+    }
+
+    // users 테이블의 현재 링 잔액과 실제 거래 내역으로 계산한 잔액 비교
+    const [verification] = await pool.execute(`
+      SELECT
+        u.id,
+        u.login_id,
+        u.username,
+        u.rings as current_balance,
+        COALESCE(
+          (SELECT SUM(charge_amount) FROM payments WHERE user_id = u.id AND status = 'completed'), 0
+        ) - COALESCE(
+          (SELECT SUM(amount) FROM consultations WHERE customer_id = u.id AND status = '완료'), 0
+        ) as calculated_balance,
+        (u.rings - (
+          COALESCE(
+            (SELECT SUM(charge_amount) FROM payments WHERE user_id = u.id AND status = 'completed'), 0
+          ) - COALESCE(
+            (SELECT SUM(amount) FROM consultations WHERE customer_id = u.id AND status = '완료'), 0
+          )
+        )) as difference
+      FROM users u
+      WHERE u.id = ?
+    `, [userId]);
+
+    if (verification.length === 0) {
+      return errorResponse(
+        res,
+        '사용자를 찾을 수 없습니다.',
+        RESPONSE_CODES.NOT_FOUND,
+        HTTP_STATUS.NOT_FOUND
+      );
+    }
+
+    const result = verification[0];
+    const isConsistent = Math.abs(result.difference) < 0.01; // 소수점 오차 허용
+
+    successResponse(res, '링 잔액 검증 완료', {
+      user_info: {
+        id: result.id,
+        login_id: result.login_id,
+        username: result.username
+      },
+      balance_verification: {
+        current_balance: result.current_balance,
+        calculated_balance: result.calculated_balance,
+        difference: result.difference,
+        is_consistent: isConsistent
+      }
+    });
+
+  } catch (error) {
+    console.error('링 잔액 검증 에러:', error);
+    errorResponse(
+      res,
+      '링 잔액 검증 중 오류가 발생했습니다.',
+      RESPONSE_CODES.DATABASE_ERROR,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
+  }
+});
+
+/**
  * 가상 결제 처리 함수 (실제 구현시 PG사 API 연동)
  */
 async function simulatePayment(amount, paymentMethod, paymentInfo) {
