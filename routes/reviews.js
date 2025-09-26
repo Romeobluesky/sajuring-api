@@ -174,6 +174,52 @@ router.post('/', authenticateToken, validateReview, async (req, res) => {
 });
 
 /**
+ * GET /api/reviews/my
+ * 내 후기 목록 조회
+ */
+router.get('/my', authenticateToken, async (req, res) => {
+  try {
+    const customerId = req.user.id; // JWT 토큰에서 사용자 ID 추출
+
+    const [reviews] = await pool.execute(`
+      SELECT
+        r.id,
+        r.consultation_id,
+        r.review_content as content,
+        r.review_rating as rating,
+        r.is_best,
+        r.created_at,
+        r.updated_at,
+        r.consultant_name,
+        r.consultant_number,
+        r.consultation_type,
+        r.consultation_method,
+        r.consultation_date,
+        c.duration_minutes,
+        cons.stage_name as consultant_stage_name
+      FROM reviews r
+      LEFT JOIN consultations c ON r.consultation_id = c.id
+      LEFT JOIN consultants cons ON r.consultant_number = cons.consultant_number
+      WHERE c.customer_id = ?
+      ORDER BY r.created_at DESC
+    `, [customerId]);
+
+    successResponse(res, '내 리뷰 목록 조회 완료', {
+      data: reviews
+    });
+
+  } catch (error) {
+    console.error('내 리뷰 조회 오류:', error);
+    errorResponse(
+      res,
+      '서버 오류가 발생했습니다.',
+      RESPONSE_CODES.DATABASE_ERROR,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
+  }
+});
+
+/**
  * GET /api/reviews/consultant/:id
  * 상담사별 후기 조회
  */
