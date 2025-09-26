@@ -301,6 +301,7 @@ router.get('/history', authenticateToken, validatePagination, async (req, res) =
        c.consultation_date, c.start_time, c.end_time, c.duration_minutes,
        c.amount, c.status, c.consultation_summary,
        cons.name as consultant_name, cons.consultant_number,
+       cons.profile_image as consultant_profile_image, cons.stage_name as consultant_stage_name,
        u.username as customer_name
        FROM consultations c
        LEFT JOIN consultants cons ON c.consultant_id = cons.id
