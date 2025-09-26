@@ -234,76 +234,104 @@ router.post('/transfer', authenticateToken, validateRingTransfer, async (req, re
 
 /**
  * GET /api/rings/history
- * 링 거래 내역 조회 (payments 테이블 연동)
+ * 링 거래 내역 조회 (충전 + 상담 사용 내역 통합)
  */
 router.get('/history', authenticateToken, validatePagination, async (req, res) => {
   try {
     const userId = req.user.id;
     const {
-      status = null,
-      payment_method = null,
+      type = null, // 'purchase', 'consultation'
       page = PAGINATION.DEFAULT_PAGE,
       limit = PAGINATION.DEFAULT_LIMIT
     } = req.query;
 
-    // WHERE 조건 구성
-    let whereConditions = ['user_id = ?'];
-    let queryParams = [userId];
-
-    if (status) {
-      whereConditions.push('status = ?');
-      queryParams.push(status);
-    }
-
-    if (payment_method) {
-      whereConditions.push('payment_method = ?');
-      queryParams.push(payment_method);
-    }
-
-    const whereClause = whereConditions.join(' AND ');
     const limitNum = Math.min(parseInt(limit) || 20, 100);
     const offset = (page - 1) * limitNum;
 
-    // payments 테이블에서 링 거래 내역 조회
-    const [payments] = await pool.execute(
-      `SELECT id, payment_method, is_sajuring_pay, payment_amount, charge_amount,
-       status, created_at
-       FROM payments
-       WHERE ${whereClause}
-       ORDER BY created_at DESC
-       LIMIT ${limitNum} OFFSET ${offset}`,
-      queryParams
+    // 타입 필터 조건
+    let typeFilter = '';
+    if (type === 'purchase') {
+      typeFilter = "WHERE type = 'purchase'";
+    } else if (type === 'consultation') {
+      typeFilter = "WHERE type = 'consultation'";
+    }
+
+    // 링 충전 내역과 상담 사용 내역을 통합 조회
+    const [history] = await pool.execute(
+      `SELECT * FROM (
+        -- 링 구매/충전 내역 (입금)
+        SELECT
+          CONCAT('PAY_', p.id) as id,
+          'purchase' as type,
+          p.charge_amount as rings,
+          p.payment_amount as amount,
+          p.payment_method,
+          CONCAT('링 ', p.charge_amount, '개 충전 (', p.payment_method, ')') as description,
+          NULL as consultant_name,
+          NULL as consultation_type,
+          NULL as consultation_duration,
+          p.created_at
+        FROM payments p
+        WHERE p.user_id = ? AND p.status = 'completed'
+
+        UNION ALL
+
+        -- 상담으로 인한 링 사용 내역 (출금)
+        SELECT
+          CONCAT('CONS_', c.id) as id,
+          'consultation' as type,
+          -c.amount as rings,  -- 음수로 표시 (사용된 링)
+          c.amount,
+          NULL as payment_method,
+          CONCAT(cons.stage_name, ' ', c.consultation_type, ' 상담') as description,
+          cons.stage_name as consultant_name,
+          c.consultation_type,
+          c.duration_minutes as consultation_duration,
+          c.created_at
+        FROM consultations c
+        JOIN consultants cons ON c.consultant_id = cons.id
+        WHERE c.customer_id = ? AND c.status = '완료'
+      ) combined_history
+      ${typeFilter}
+      ORDER BY created_at DESC
+      LIMIT ${limitNum} OFFSET ${offset}`,
+      [userId, userId]
     );
 
-    // 전체 개수 조회
-    const [countResult] = await pool.execute(
-      `SELECT COUNT(*) as total FROM payments WHERE ${whereClause}`,
-      queryParams
-    );
-    const total = countResult[0].total;
+    // 전체 개수 조회 (타입별 필터링)
+    let total = 0;
+    if (type === 'purchase') {
+      const [purchaseCount] = await pool.execute(
+        'SELECT COUNT(*) as total FROM payments WHERE user_id = ? AND status = "completed"',
+        [userId]
+      );
+      total = purchaseCount[0].total;
+    } else if (type === 'consultation') {
+      const [consultationCount] = await pool.execute(
+        'SELECT COUNT(*) as total FROM consultations WHERE customer_id = ? AND status = "완료"',
+        [userId]
+      );
+      total = consultationCount[0].total;
+    } else {
+      // 전체 개수 (purchase + consultation)
+      const [purchaseCount] = await pool.execute(
+        'SELECT COUNT(*) as total FROM payments WHERE user_id = ? AND status = "completed"',
+        [userId]
+      );
+      const [consultationCount] = await pool.execute(
+        'SELECT COUNT(*) as total FROM consultations WHERE customer_id = ? AND status = "완료"',
+        [userId]
+      );
+      total = purchaseCount[0].total + consultationCount[0].total;
+    }
 
     const pagination = createPagination(page, limitNum, total);
-
-    // 응답 형식을 앱에서 사용하기 쉽게 변환
-    const history = payments.map(payment => ({
-      id: payment.id,
-      type: 'purchase', // 모든 payment는 구매/충전 거래
-      payment_method: payment.payment_method,
-      is_sajuring_pay: payment.is_sajuring_pay,
-      payment_amount: payment.payment_amount, // 실제 결제 금액
-      charge_amount: payment.charge_amount,   // 충전된 링 수량
-      rings: payment.charge_amount,           // 앱 호환성을 위해 rings 필드도 제공
-      status: payment.status,
-      description: `링 ${payment.charge_amount}개 충전 (${payment.payment_method})`,
-      created_at: payment.created_at
-    }));
 
     successResponse(res, '링 거래 내역 조회 완료', {
       history,
       count: history.length,
       filters: {
-        status,
-        payment_method,
+        type,
         limit: limitNum
       }
     }, pagination);
