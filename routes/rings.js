@@ -268,6 +268,7 @@ router.get('/history', authenticateToken, validatePagination, async (req, res) =
           p.payment_method,
           CONCAT('링 ', p.charge_amount, '개 충전 (', p.payment_method, ')') as description,
           NULL as consultant_name,
+          NULL as consultant_number,
           NULL as consultation_type,
           NULL as consultation_duration,
           p.created_at
@@ -285,6 +286,7 @@ router.get('/history', authenticateToken, validatePagination, async (req, res) =
           NULL as payment_method,
           CONCAT(cons.stage_name, ' ', c.consultation_type, ' 상담') as description,
           cons.stage_name as consultant_name,
+          cons.consultant_number,
           c.consultation_type,
           c.duration_minutes as consultation_duration,
           c.created_at
