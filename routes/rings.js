@@ -234,61 +234,85 @@ router.post('/transfer', authenticateToken, validateRingTransfer, async (req, re
 
 /**
  * GET /api/rings/history
- * 링 사용 내역 조회
+ * 링 거래 내역 조회 (payments 테이블 연동)
  */
 router.get('/history', authenticateToken, validatePagination, async (req, res) => {
   try {
     const userId = req.user.id;
     const {
-      type = null, // 'purchase', 'transfer_send', 'transfer_receive', 'consultation'
+      status = null,
+      payment_method = null,
       page = PAGINATION.DEFAULT_PAGE,
       limit = PAGINATION.DEFAULT_LIMIT
     } = req.query;
 
-    // 실제 구현시 ring_transactions 테이블에서 조회
-    // 현재는 예시 데이터로 응답
-    const mockHistory = [
-      {
-        id: 1,
-        type: 'purchase',
-        amount: 10000,
-        rings: 100,
-        description: '링 구매',
-        created_at: new Date().toISOString()
-      },
-      {
-        id: 2,
-        type: 'transfer_send',
-        amount: null,
-        rings: -20,
-        description: '상담사에게 링 전송',
-        target_user: '홍길동 상담사',
-        created_at: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-      }
-    ];
+    // WHERE 조건 구성
+    let whereConditions = ['user_id = ?'];
+    let queryParams = [userId];
 
-    // 타입 필터링
-    let filteredHistory = mockHistory;
-    if (type) {
-      filteredHistory = mockHistory.filter(item => item.type === type);
+    if (status) {
+      whereConditions.push('status = ?');
+      queryParams.push(status);
     }
 
-    const total = filteredHistory.length;
-    const offset = (page - 1) * limit;
-    const paginatedHistory = filteredHistory.slice(offset, offset + parseInt(limit));
+    if (payment_method) {
+      whereConditions.push('payment_method = ?');
+      queryParams.push(payment_method);
+    }
 
-    const pagination = createPagination(page, limit, total);
+    const whereClause = whereConditions.join(' AND ');
+    const limitNum = Math.min(parseInt(limit) || 20, 100);
+    const offset = (page - 1) * limitNum;
 
-    successResponse(res, '링 사용 내역 조회 완료', {
-      history: paginatedHistory,
-      filter: { type }
+    // payments 테이블에서 링 거래 내역 조회
+    const [payments] = await pool.execute(
+      `SELECT id, payment_method, is_sajuring_pay, payment_amount, charge_amount,
+       status, created_at
+       FROM payments
+       WHERE ${whereClause}
+       ORDER BY created_at DESC
+       LIMIT ${limitNum} OFFSET ${offset}`,
+      queryParams
+    );
+
+    // 전체 개수 조회
+    const [countResult] = await pool.execute(
+      `SELECT COUNT(*) as total FROM payments WHERE ${whereClause}`,
+      queryParams
+    );
+    const total = countResult[0].total;
+
+    const pagination = createPagination(page, limitNum, total);
+
+    // 응답 형식을 앱에서 사용하기 쉽게 변환
+    const history = payments.map(payment => ({
+      id: payment.id,
+      type: 'purchase', // 모든 payment는 구매/충전 거래
+      payment_method: payment.payment_method,
+      is_sajuring_pay: payment.is_sajuring_pay,
+      payment_amount: payment.payment_amount, // 실제 결제 금액
+      charge_amount: payment.charge_amount,   // 충전된 링 수량
+      rings: payment.charge_amount,           // 앱 호환성을 위해 rings 필드도 제공
+      status: payment.status,
+      description: `링 ${payment.charge_amount}개 충전 (${payment.payment_method})`,
+      created_at: payment.created_at
+    }));
+
+    successResponse(res, '링 거래 내역 조회 완료', {
+      history,
+      count: history.length,
+      filters: {
+        status,
+        payment_method,
+        limit: limitNum
+      }
     }, pagination);
 
   } catch (error) {
     console.error('링 내역 조회 에러:', error);
     errorResponse(
       res,
-      '링 사용 내역 조회 중 오류가 발생했습니다.',
+      '링 거래 내역 조회 중 오류가 발생했습니다.',
       RESPONSE_CODES.DATABASE_ERROR,
       HTTP_STATUS.INTERNAL_SERVER_ERROR
     );
