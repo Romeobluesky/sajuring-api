@@ -295,17 +295,22 @@ router.get('/history', authenticateToken, validatePagination, async (req, res) =
     const limitNum = Math.min(parseInt(limit) || 20, 100);
     const offset = (page - 1) * limitNum;
 
-    // 상담 기록 조회
+    // 상담 기록 조회 (후기 작성 여부 포함)
     const [consultations] = await pool.execute(
       `SELECT c.id, c.consultation_id, c.consultation_type, c.consultation_method,
        c.consultation_date, c.start_time, c.end_time, c.duration_minutes,
        c.amount, c.status, c.consultation_summary,
        cons.name as consultant_name, cons.consultant_number,
        cons.profile_image as consultant_profile_image, cons.stage_name as consultant_stage_name,
-       u.username as customer_name
+       u.username as customer_name,
+       CASE WHEN r.id IS NOT NULL THEN true ELSE false END as has_review,
+       CASE WHEN c.end_time IS NOT NULL
+            THEN DATE_ADD(c.end_time, INTERVAL 7 DAY)
+            ELSE NULL END as review_deadline
        FROM consultations c
        LEFT JOIN consultants cons ON c.consultant_id = cons.id
        LEFT JOIN users u ON c.customer_id = u.id
+       LEFT JOIN reviews r ON c.id = r.consultation_id
        WHERE ${whereClause}
        ORDER BY c.consultation_date DESC, c.start_time DESC
        LIMIT ${limitNum} OFFSET ${offset}`,
