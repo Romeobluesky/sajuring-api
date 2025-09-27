@@ -36,6 +36,9 @@ app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// 정적 파일 서빙 설정 (이벤트 이미지)
+app.use('/users_event_images', express.static('users_event_images'));
+
 // 요청 로깅 미들웨어
 app.use((req, res, next) => {
   const timestamp = new Date().toISOString();
