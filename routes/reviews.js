@@ -187,6 +187,8 @@ router.get('/my', authenticateToken, async (req, res) => {
         r.consultation_id,
         r.review_content as content,
         r.review_rating as rating,
+        r.consultant_comment,
+        r.comment_date,
         r.is_best,
         r.created_at,
         r.updated_at,
