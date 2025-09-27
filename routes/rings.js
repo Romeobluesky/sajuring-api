@@ -288,7 +288,7 @@ router.get('/history', authenticateToken, validatePagination, async (req, res) =
           cons.stage_name as consultant_name,
           cons.consultant_number,
           c.consultation_type,
-          c.duration_minutes as consultation_duration,
+          c.duration_time as consultation_duration,
           c.created_at
         FROM consultations c
         JOIN consultants cons ON c.consultant_id = cons.id

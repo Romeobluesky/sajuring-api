@@ -197,7 +197,7 @@ router.get('/my', authenticateToken, async (req, res) => {
         r.consultation_type,
         r.consultation_method,
         r.consultation_date,
-        c.duration_minutes,
+        c.duration_time,
         cons.stage_name as consultant_stage_name
       FROM reviews r
       LEFT JOIN consultations c ON r.consultation_id = c.id

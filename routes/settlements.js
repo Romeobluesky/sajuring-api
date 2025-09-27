@@ -224,8 +224,24 @@ router.post('/calculate/:month', authenticateToken, requireAdmin, async (req, re
       const group = consultantGroups[consultantId];
       group.consultations.push(consultation);
       group.total_count += 1;
-      group.total_minutes += consultation.duration_minutes || 0;
-      group.total_seconds += (consultation.duration_minutes || 0) * 60;
+
+      // duration_time (HH:mm:ss)를 초 단위로 변환 (정산은 30초 단위이므로 정확성 필요)
+      let durationSeconds = 0;
+      if (consultation.duration_time) {
+        const timeParts = consultation.duration_time.split(':');
+        if (timeParts.length === 3) {
+          const hours = parseInt(timeParts[0]) || 0;
+          const minutes = parseInt(timeParts[1]) || 0;
+          const seconds = parseInt(timeParts[2]) || 0;
+          durationSeconds = hours * 3600 + minutes * 60 + seconds;
+        }
+      } else if (consultation.duration_minutes) {
+        // fallback: 기존 duration_minutes가 있으면 사용 (분을 초로 변환)
+        durationSeconds = (consultation.duration_minutes || 0) * 60;
+      }
+
+      group.total_seconds += durationSeconds;
+      group.total_minutes += Math.ceil(durationSeconds / 60); // 분은 참고용으로만
       group.total_customer_payment += consultation.amount || 0;
 
       // 임시 정산율 70% 적용
