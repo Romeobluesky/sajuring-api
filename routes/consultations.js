@@ -284,13 +284,12 @@ router.post('/end', authenticateToken, validateConsultationEnd, async (req, res)
     // 상담 종료 처리 (새로운 컬럼들 포함)
     await pool.execute(
       `UPDATE consultations
-       SET end_time = ?, end_datetime = ?, duration_minutes = ?, duration_time = ?, amount = ?,
+       SET end_time = ?, end_datetime = ?, duration_time = ?, amount = ?,
            status = '완료', consultation_summary = ?, consultation_notes = ?
        WHERE id = ?`,
       [
         endDateTime.toTimeString().split(' ')[0], // HH:mm:ss 형태 (호환성)
         endDateTime, // 새로운 end_datetime 컬럼
-        durationMinutes,
         durationTime, // 새로운 duration_time 컬럼
         totalAmount,
         consultation_summary,
@@ -325,7 +324,7 @@ router.post('/end', authenticateToken, validateConsultationEnd, async (req, res)
         start_datetime: startDateTime.toISOString(), // 새로운 필드
         end_datetime: endDateTime.toISOString(), // 새로운 필드
         duration_time: durationTime, // 새로운 필드
-        duration_minutes: durationMinutes, // 호환성
+        duration_minutes: durationMinutes, // 호환성 (응답에만 포함)
         total_amount: totalAmount,
         consultant_amount: consultantAmount,
         status: '완료'
@@ -382,7 +381,7 @@ router.get('/history', authenticateToken, validatePagination, async (req, res) =
       `SELECT c.id, c.consultation_id, c.consultation_type, c.consultation_method,
        c.consultation_date,
        c.start_datetime, c.end_datetime, c.duration_time,
-       c.start_time, c.end_time, c.duration_minutes,
+       c.start_time, c.end_time,
        c.amount, c.status, c.consultation_summary,
        cons.name as consultant_name, cons.consultant_number,
        cons.profile_image as consultant_profile_image, cons.stage_name as consultant_stage_name,
@@ -447,7 +446,7 @@ router.get('/:id/status', authenticateToken, validateId, async (req, res) => {
     const [consultations] = await pool.execute(
       `SELECT c.id, c.consultation_id, c.status,
        c.start_datetime, c.end_datetime, c.duration_time,
-       c.start_time, c.end_time, c.duration_minutes,
+       c.start_time, c.end_time,
        c.amount,
        cons.name as consultant_name,
        u.username as customer_name
