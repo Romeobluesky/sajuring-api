@@ -256,24 +256,39 @@ const validateInquiry = [
     .withMessage('문의 유형을 선택해주세요.')
     .isLength({ max: 50 })
     .withMessage('문의 유형은 50자 이하여야 합니다.'),
-    
+
   body('inquiries_title')
     .notEmpty()
     .withMessage('제목을 입력해주세요.')
     .isLength({ min: 5, max: 100 })
     .withMessage('제목은 5-100자 사이여야 합니다.'),
-    
+
   body('inquiries_content')
     .notEmpty()
     .withMessage('내용을 입력해주세요.')
     .isLength({ min: 10, max: 2000 })
     .withMessage('내용은 10-2000자 사이여야 합니다.'),
-    
+
   body('is_private')
     .optional()
     .isBoolean()
     .withMessage('공개 여부는 true 또는 false여야 합니다.'),
-    
+
+  body('attachment_image')
+    .optional()
+    .isLength({ max: 500 })
+    .withMessage('첨부 이미지 경로는 500자 이하여야 합니다.'),
+
+  body('attachment_voice')
+    .optional()
+    .isLength({ max: 500 })
+    .withMessage('첨부 음성 파일 경로는 500자 이하여야 합니다.'),
+
+  body('notification_enabled')
+    .optional()
+    .isBoolean()
+    .withMessage('알림 설정은 true 또는 false여야 합니다.'),
+
   handleValidationErrors
 ];
 
