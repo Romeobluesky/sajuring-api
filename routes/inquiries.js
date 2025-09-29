@@ -223,7 +223,9 @@ router.get('/', authenticateToken, validatePagination, async (req, res) => {
       limit = PAGINATION.DEFAULT_LIMIT
     } = req.query;
 
-    const offset = (page - 1) * limit;
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const offset = (pageNum - 1) * limitNum;
 
     // WHERE 조건 구성
     let whereConditions = ['user_id = ?'];
@@ -256,11 +258,11 @@ router.get('/', authenticateToken, validatePagination, async (req, res) => {
        FROM inquiries
        WHERE ${whereClause}
        ORDER BY created_at DESC
-       LIMIT ? OFFSET ?`,
-      [...queryParams, parseInt(limit), parseInt(offset)]
+       LIMIT ${limitNum} OFFSET ${offset}`,
+      queryParams
     );
 
-    const pagination = createPagination(page, limit, total);
+    const pagination = createPagination(pageNum, limitNum, total);
 
     successResponse(res, '내 문의사항 목록 조회 완료', {
       inquiries,

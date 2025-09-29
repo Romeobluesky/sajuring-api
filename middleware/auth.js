@@ -26,7 +26,7 @@ const authenticateToken = async (req, res, next) => {
     // 사용자 정보 조회 및 상태 확인
     const [users] = await pool.execute(
       'SELECT id, username, email, nickname, role, status, role_level FROM users WHERE id = ?',
-      [decoded.userId]
+      [decoded.id]
     );
 
     if (users.length === 0) {
@@ -109,7 +109,7 @@ const optionalAuth = async (req, res, next) => {
     
     const [users] = await pool.execute(
       'SELECT id, username, email, nickname, role, status, role_level FROM users WHERE id = ? AND status = ?',
-      [decoded.userId, USER_STATUS.ACTIVE]
+      [decoded.id, USER_STATUS.ACTIVE]
     );
 
     if (users.length > 0) {

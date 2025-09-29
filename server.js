@@ -20,6 +20,7 @@ const usersRoutes = require('./routes/users');
 const noticesRoutes = require('./routes/notices');
 const headerBannerRoutes = require('./routes/header-banners');
 const testRoutes = require('./routes/test');
+const debugRoutes = require('./routes/debug');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -85,6 +86,7 @@ app.use('/api/users', usersRoutes);
 app.use('/api/notices', noticesRoutes);
 app.use('/api/header-banners', headerBannerRoutes);
 app.use('/api/test', testRoutes);
+app.use('/api/debug', debugRoutes);
 
 // 404 에러 핸들러
 app.use('*', (req, res) => {
