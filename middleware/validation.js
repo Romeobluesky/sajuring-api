@@ -251,28 +251,44 @@ const validateRingTransfer = [
  * 문의사항 등록 유효성 검사
  */
 const validateInquiry = [
-  body('inquiries_type')
-    .notEmpty()
-    .withMessage('문의 유형을 선택해주세요.')
-    .isLength({ max: 50 })
-    .withMessage('문의 유형은 50자 이하여야 합니다.'),
+  // 서버 필드명 또는 클라이언트 필드명 지원
+  body().custom((value, { req }) => {
+    const inquiryType = req.body.inquiry_type || req.body.inquiries_type;
+    const title = req.body.title || req.body.inquiries_title;
+    const content = req.body.content || req.body.inquiries_content;
 
-  body('inquiries_title')
-    .notEmpty()
-    .withMessage('제목을 입력해주세요.')
-    .isLength({ min: 5, max: 100 })
-    .withMessage('제목은 5-100자 사이여야 합니다.'),
+    if (!inquiryType) {
+      throw new Error('문의 유형을 선택해주세요.');
+    }
+    if (!title) {
+      throw new Error('제목을 입력해주세요.');
+    }
+    if (!content) {
+      throw new Error('내용을 입력해주세요.');
+    }
 
-  body('inquiries_content')
-    .notEmpty()
-    .withMessage('내용을 입력해주세요.')
-    .isLength({ min: 10, max: 2000 })
-    .withMessage('내용은 10-2000자 사이여야 합니다.'),
+    if (inquiryType.length > 50) {
+      throw new Error('문의 유형은 50자 이하여야 합니다.');
+    }
+    if (title.length < 5 || title.length > 100) {
+      throw new Error('제목은 5-100자 사이여야 합니다.');
+    }
+    if (content.length < 10 || content.length > 2000) {
+      throw new Error('내용은 10-2000자 사이여야 합니다.');
+    }
+
+    return true;
+  }),
 
   body('is_private')
     .optional()
     .isBoolean()
     .withMessage('공개 여부는 true 또는 false여야 합니다.'),
+
+  body('sms_agree')
+    .optional()
+    .isBoolean()
+    .withMessage('SMS 수신 동의는 true 또는 false여야 합니다.'),
 
   body('attachment_image')
     .optional()

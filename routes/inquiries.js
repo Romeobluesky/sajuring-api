@@ -57,15 +57,29 @@ const upload = multer({
 router.post('/', authenticateToken, validateInquiry, async (req, res) => {
   try {
     const userId = req.user.id;
+    // 클라이언트 친화적 필드명 지원
     const {
+      // 기존 서버 필드명
       inquiries_type,
       inquiries_title,
       inquiries_content,
       is_private = false,
+      // 클라이언트 친화적 필드명
+      inquiry_type,
+      title,
+      content,
+      sms_agree,
+      // 공통 필드
       attachment_image = null,
       attachment_voice = null,
       notification_enabled = true
     } = req.body;
+
+    // 필드명 매핑 (클라이언트 우선)
+    const finalInquiryType = inquiry_type || inquiries_type;
+    const finalTitle = title || inquiries_title;
+    const finalContent = content || inquiries_content;
+    const finalIsPrivate = sms_agree !== undefined ? !sms_agree : is_private;
 
     // 사용자 정보 조회 (이름, 전화번호, 이메일)
     const [users] = await pool.execute(
@@ -95,11 +109,11 @@ router.post('/', authenticateToken, validateInquiry, async (req, res) => {
         user.username,
         user.phone,
         user.email,
-        inquiries_type,
-        inquiries_title,
-        inquiries_content,
+        finalInquiryType,
+        finalTitle,
+        finalContent,
         INQUIRY_STATUS.PENDING,
-        is_private ? 1 : 0,
+        finalIsPrivate ? 1 : 0,
         attachment_image,
         attachment_voice,
         notification_enabled ? 1 : 0
@@ -111,16 +125,17 @@ router.post('/', authenticateToken, validateInquiry, async (req, res) => {
     successResponse(res, '문의사항이 등록되었습니다.', {
       inquiry: {
         id: inquiryId,
-        inquiries_type,
-        inquiries_title,
-        inquiries_content,
+        inquiry_type: finalInquiryType,
+        title: finalTitle,
+        content: finalContent,
         inquiries_state: INQUIRY_STATUS.PENDING,
-        is_private,
+        is_private: finalIsPrivate,
+        sms_agree: !finalIsPrivate,
         attachment_image,
         attachment_voice,
         notification_enabled
       }
-    });
+    }, {}, 201);
 
   } catch (error) {
     console.error('문의사항 등록 에러:', error);
