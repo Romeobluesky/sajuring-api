@@ -51,10 +51,63 @@ const upload = multer({
 });
 
 /**
- * POST /api/inquiries
- * 문의사항 등록
+ * Content-Type 감지 미들웨어
  */
-router.post('/', authenticateToken, validateInquiry, async (req, res) => {
+const detectContentType = (req, res, next) => {
+  const contentType = req.get('Content-Type') || '';
+
+  if (contentType.includes('multipart/form-data')) {
+    // multipart 요청인 경우 multer 적용
+    upload.fields([
+      { name: 'attachment_image', maxCount: 1 },
+      { name: 'attachment_voice', maxCount: 1 }
+    ])(req, res, (err) => {
+      if (err) {
+        console.error('Multer 에러:', err);
+        return errorResponse(
+          res,
+          err.message.includes('형식') ? err.message : '파일 업로드 중 오류가 발생했습니다.',
+          RESPONSE_CODES.VALIDATION_ERROR,
+          HTTP_STATUS.BAD_REQUEST
+        );
+      }
+
+      // multipart 요청에서는 문자열로 전송되므로 파싱 필요
+      if (req.body.sms_agree) {
+        req.body.sms_agree = req.body.sms_agree === 'true';
+      }
+      if (req.body.notification_enabled) {
+        req.body.notification_enabled = req.body.notification_enabled === 'true';
+      }
+      if (req.body.is_private) {
+        req.body.is_private = req.body.is_private === 'true';
+      }
+
+      // 파일 경로 설정
+      if (req.files && req.files.attachment_image) {
+        req.body.attachment_image = `/uploads/inquiries/${req.files.attachment_image[0].filename}`;
+      }
+      if (req.files && req.files.attachment_voice) {
+        req.body.attachment_voice = `/uploads/inquiries/${req.files.attachment_voice[0].filename}`;
+      }
+
+      console.log('Multipart 요청 파싱 결과:');
+      console.log('Body:', req.body);
+      console.log('Files:', req.files);
+
+      next();
+    });
+  } else {
+    // JSON 요청인 경우 그대로 진행
+    next();
+  }
+};
+
+/**
+ * POST /api/inquiries
+ * 문의사항 등록 (JSON 및 multipart/form-data 지원)
+ */
+router.post('/', authenticateToken, detectContentType, validateInquiry, async (req, res) => {
   try {
     const userId = req.user.id;
     // 클라이언트 친화적 필드명 지원

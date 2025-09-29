@@ -251,19 +251,25 @@ const validateRingTransfer = [
  * 문의사항 등록 유효성 검사
  */
 const validateInquiry = [
-  // 서버 필드명 또는 클라이언트 필드명 지원
+  // 서버 필드명 또는 클라이언트 필드명 지원 (multipart 호환)
   body().custom((value, { req }) => {
     const inquiryType = req.body.inquiry_type || req.body.inquiries_type;
     const title = req.body.title || req.body.inquiries_title;
     const content = req.body.content || req.body.inquiries_content;
 
-    if (!inquiryType) {
+    console.log('검증 중인 데이터:');
+    console.log('inquiry_type:', inquiryType);
+    console.log('title:', title);
+    console.log('content:', content);
+    console.log('전체 body:', req.body);
+
+    if (!inquiryType || inquiryType.trim() === '') {
       throw new Error('문의 유형을 선택해주세요.');
     }
-    if (!title) {
+    if (!title || title.trim() === '') {
       throw new Error('제목을 입력해주세요.');
     }
-    if (!content) {
+    if (!content || content.trim() === '') {
       throw new Error('내용을 입력해주세요.');
     }
 
