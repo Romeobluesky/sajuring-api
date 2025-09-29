@@ -33,12 +33,20 @@ const fileFilter = (req, file, cb) => {
   const allowedAudioTypes = ['.mp3', '.m4a', '.wav', '.aac', '.ogg'];
   const extension = path.extname(file.originalname).toLowerCase();
 
-  if (file.fieldname === 'image' && allowedImageTypes.includes(extension)) {
+  console.log('파일 필터링 체크:');
+  console.log('필드명:', file.fieldname);
+  console.log('원본 파일명:', file.originalname);
+  console.log('확장자:', extension);
+
+  if (file.fieldname === 'attachment_image' && allowedImageTypes.includes(extension)) {
+    console.log('✅ 이미지 파일 허용');
     cb(null, true);
-  } else if (file.fieldname === 'voice' && allowedAudioTypes.includes(extension)) {
+  } else if (file.fieldname === 'attachment_voice' && allowedAudioTypes.includes(extension)) {
+    console.log('✅ 음성 파일 허용');
     cb(null, true);
   } else {
-    cb(new Error('지원하지 않는 파일 형식입니다.'), false);
+    console.log('❌ 파일 거부 - 필드명:', file.fieldname, '확장자:', extension);
+    cb(new Error(`지원하지 않는 파일입니다. 필드명: ${file.fieldname}, 확장자: ${extension}`), false);
   }
 };
 
