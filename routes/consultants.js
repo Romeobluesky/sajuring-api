@@ -274,8 +274,8 @@ router.get('/consultant-events', optionalAuth, validatePagination, async (req, r
       queryParams.push(event_type);
     }
 
-    // 진행중인 이벤트만 (종료일이 현재보다 미래)
-    whereConditions.push('(end_date IS NULL OR end_date >= NOW())');
+    // 진행중인 이벤트만 (종료일이 오늘 날짜 이후 또는 오늘 날짜인 경우 포함)
+    whereConditions.push('(end_date IS NULL OR DATE(end_date) >= CURDATE())');
 
     const whereClause = whereConditions.join(' AND ');
     const limitNum = Math.min(parseInt(limit) || 20, 100);
@@ -466,10 +466,17 @@ router.get('/consultant-events/:id', optionalAuth, validateId, async (req, res) 
     // 이벤트에 상담사 상세 정보 추가
     event.consultant_details = consultantDetails;
 
-    // 이벤트 상태 확인
+    // 이벤트 상태 확인 (날짜만 비교, 시간 제외)
     const now = new Date();
+    now.setHours(0, 0, 0, 0); // 오늘 날짜 00:00:00
+
     const startDate = new Date(event.start_date);
+    startDate.setHours(0, 0, 0, 0);
+
     const endDate = event.end_date ? new Date(event.end_date) : null;
+    if (endDate) {
+      endDate.setHours(0, 0, 0, 0);
+    }
 
     let eventStatus = 'active';
     if (startDate > now) {
@@ -556,14 +563,21 @@ router.post('/consultant-events/:id/join', authenticateToken, validateId, async 
       );
     }
 
-    // 이벤트 종료일 확인
-    if (event.end_date && new Date(event.end_date) < new Date()) {
-      return errorResponse(
-        res,
-        '종료된 이벤트입니다.',
-        RESPONSE_CODES.VALIDATION_ERROR,
-        HTTP_STATUS.BAD_REQUEST
-      );
+    // 이벤트 종료일 확인 (오늘 날짜까지 포함)
+    if (event.end_date) {
+      const endDate = new Date(event.end_date);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0); // 오늘 날짜의 00:00:00으로 설정
+      endDate.setHours(0, 0, 0, 0); // 종료일의 00:00:00으로 설정
+
+      if (endDate < today) {
+        return errorResponse(
+          res,
+          '종료된 이벤트입니다.',
+          RESPONSE_CODES.VALIDATION_ERROR,
+          HTTP_STATUS.BAD_REQUEST
+        );
+      }
     }
 
     // 현재 참여자 목록 파싱

@@ -252,8 +252,9 @@ router.get('/', authenticateToken, validatePagination, async (req, res) => {
 
     // 문의사항 목록 조회
     const [inquiries] = await pool.execute(
-      `SELECT id, inquiries_type, inquiries_title, inquiries_state,
-       is_private, attachment_image, attachment_voice, notification_enabled,
+      `SELECT id, inquiries_type, inquiries_title, inquiries_content,
+       inquiries_answer, inquiries_state, is_private,
+       attachment_image, attachment_voice, notification_enabled,
        created_at, updated_at, inquiries_answer_at
        FROM inquiries
        WHERE ${whereClause}
