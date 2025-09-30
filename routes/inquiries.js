@@ -11,19 +11,38 @@ const { RESPONSE_CODES, HTTP_STATUS, PAGINATION, INQUIRY_STATUS } = require('../
 
 const router = express.Router();
 
-// 업로드 설정
+// 업로드 설정 (절대 경로 사용)
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    const uploadPath = 'public/uploads/inquiries/';
-    console.log('📁 업로드 경로 설정:', uploadPath);
+    // admin.sajuring.co.kr의 uploads 폴더 경로
+    const uploadPath = '/home/sajuring-admin/public/uploads/inquiries';
 
+    console.log('========== multer destination 설정 ==========');
+    console.log('📁 절대 경로:', uploadPath);
+    console.log('📁 __dirname:', __dirname);
+
+    // 폴더 생성
     if (!fs.existsSync(uploadPath)) {
       console.log('⚠️ 폴더가 없어서 생성합니다:', uploadPath);
-      fs.mkdirSync(uploadPath, { recursive: true });
+      try {
+        fs.mkdirSync(uploadPath, { recursive: true, mode: 0o755 });
+        console.log('✅ 폴더 생성 완료');
+      } catch (error) {
+        console.error('❌ 폴더 생성 실패:', error);
+      }
     } else {
-      console.log('✅ 폴더가 이미 존재합니다:', uploadPath);
+      console.log('✅ 폴더가 이미 존재합니다');
+
+      // 폴더 권한 확인
+      try {
+        const stats = fs.statSync(uploadPath);
+        console.log('📋 폴더 권한:', (stats.mode & parseInt('777', 8)).toString(8));
+      } catch (error) {
+        console.error('❌ 폴더 정보 조회 실패:', error);
+      }
     }
 
+    console.log('=============================================');
     cb(null, uploadPath);
   },
   filename: function (req, file, cb) {
@@ -31,10 +50,12 @@ const storage = multer.diskStorage({
     const extension = path.extname(file.originalname);
     const filename = file.fieldname + '-' + uniqueSuffix + extension;
 
-    console.log('📝 파일명 생성:', filename);
+    console.log('========== multer filename 생성 ==========');
+    console.log('📝 생성된 파일명:', filename);
     console.log('   - 원본 파일명:', file.originalname);
     console.log('   - 필드명:', file.fieldname);
     console.log('   - 확장자:', extension);
+    console.log('=========================================');
 
     cb(null, filename);
   }
@@ -184,6 +205,55 @@ const detectContentType = (req, res, next) => {
  */
 router.post('/', authenticateToken, detectContentType, validateInquiry, async (req, res) => {
   try {
+    console.log('========== 파일 업로드 디버깅 ==========');
+    console.log('1. req.files:', req.files);
+    console.log('2. req.body:', req.body);
+
+    // 파일 업로드 확인
+    if (req.files && req.files.attachment_image) {
+      const file = req.files.attachment_image[0];
+      console.log('3. 업로드된 파일 정보:');
+      console.log('   - fieldname:', file.fieldname);
+      console.log('   - originalname:', file.originalname);
+      console.log('   - filename:', file.filename);
+      console.log('   - path:', file.path);
+      console.log('   - size:', file.size);
+      console.log('   - mimetype:', file.mimetype);
+
+      // 파일이 실제로 존재하는지 확인
+      const fileExists = fs.existsSync(file.path);
+      console.log('4. 파일 존재 여부:', fileExists);
+
+      if (fileExists) {
+        const stats = fs.statSync(file.path);
+        console.log('5. 실제 파일 크기:', stats.size, 'bytes');
+        console.log('6. 파일 권한:', (stats.mode & parseInt('777', 8)).toString(8));
+        console.log('7. ✅ 파일이 정상적으로 저장되었습니다!');
+      } else {
+        console.error('❌ 파일이 저장되지 않았습니다!');
+        console.log('7. 저장 경로 확인:', file.path);
+        console.log('8. 상위 폴더 존재 여부:', fs.existsSync(path.dirname(file.path)));
+
+        // 상위 폴더 정보
+        if (fs.existsSync(path.dirname(file.path))) {
+          const dirStats = fs.statSync(path.dirname(file.path));
+          console.log('9. 상위 폴더 권한:', (dirStats.mode & parseInt('777', 8)).toString(8));
+        }
+      }
+    } else {
+      console.error('❌ req.files에 attachment_image가 없습니다!');
+    }
+
+    if (req.files && req.files.attachment_voice) {
+      const file = req.files.attachment_voice[0];
+      console.log('음성 파일 정보:');
+      console.log('   - path:', file.path);
+      console.log('   - size:', file.size);
+      console.log('   - exists:', fs.existsSync(file.path));
+    }
+
+    console.log('=====================================');
+
     const userId = req.user.id;
     // 클라이언트 친화적 필드명 지원
     const {
