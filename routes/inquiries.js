@@ -15,15 +15,28 @@ const router = express.Router();
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     const uploadPath = 'public/uploads/inquiries/';
+    console.log('📁 업로드 경로 설정:', uploadPath);
+
     if (!fs.existsSync(uploadPath)) {
+      console.log('⚠️ 폴더가 없어서 생성합니다:', uploadPath);
       fs.mkdirSync(uploadPath, { recursive: true });
+    } else {
+      console.log('✅ 폴더가 이미 존재합니다:', uploadPath);
     }
+
     cb(null, uploadPath);
   },
   filename: function (req, file, cb) {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     const extension = path.extname(file.originalname);
-    cb(null, file.fieldname + '-' + uniqueSuffix + extension);
+    const filename = file.fieldname + '-' + uniqueSuffix + extension;
+
+    console.log('📝 파일명 생성:', filename);
+    console.log('   - 원본 파일명:', file.originalname);
+    console.log('   - 필드명:', file.fieldname);
+    console.log('   - 확장자:', extension);
+
+    cb(null, filename);
   }
 });
 
@@ -81,14 +94,20 @@ const upload = multer({
 const detectContentType = (req, res, next) => {
   const contentType = req.get('Content-Type') || '';
 
+  console.log('🔍 Content-Type 감지:', contentType);
+
   if (contentType.includes('multipart/form-data')) {
+    console.log('📤 Multipart 요청 감지 - multer 미들웨어 적용');
+
     // multipart 요청인 경우 multer 적용
     upload.fields([
       { name: 'attachment_image', maxCount: 1 },
       { name: 'attachment_voice', maxCount: 1 }
     ])(req, res, (err) => {
       if (err) {
-        console.error('Multer 에러:', err);
+        console.error('❌ Multer 에러:', err);
+        console.error('   - 에러 메시지:', err.message);
+        console.error('   - 에러 코드:', err.code);
         return errorResponse(
           res,
           err.message.includes('형식') ? err.message : '파일 업로드 중 오류가 발생했습니다.',
@@ -96,6 +115,9 @@ const detectContentType = (req, res, next) => {
           HTTP_STATUS.BAD_REQUEST
         );
       }
+
+      console.log('✅ Multer 처리 완료');
+      console.log('📎 업로드된 파일 정보:', req.files);
 
       // multipart 요청에서는 문자열로 전송되므로 파싱 필요
       if (req.body.sms_agree) {
@@ -110,19 +132,47 @@ const detectContentType = (req, res, next) => {
 
       // 파일 경로 설정
       if (req.files && req.files.attachment_image) {
-        req.body.attachment_image = `/uploads/inquiries/${req.files.attachment_image[0].filename}`;
-      }
-      if (req.files && req.files.attachment_voice) {
-        req.body.attachment_voice = `/uploads/inquiries/${req.files.attachment_voice[0].filename}`;
+        const imagePath = `/uploads/inquiries/${req.files.attachment_image[0].filename}`;
+        const fullPath = `public${imagePath}`;
+        req.body.attachment_image = imagePath;
+
+        console.log('🖼️ 이미지 파일 처리:');
+        console.log('   - 저장 경로:', fullPath);
+        console.log('   - DB 경로:', imagePath);
+        console.log('   - 파일 크기:', req.files.attachment_image[0].size, 'bytes');
+
+        // 파일 실제 저장 확인
+        if (fs.existsSync(fullPath)) {
+          console.log('   ✅ 파일이 실제로 저장되었습니다!');
+        } else {
+          console.log('   ❌ 파일이 저장되지 않았습니다!');
+        }
       }
 
-      console.log('Multipart 요청 파싱 결과:');
-      console.log('Body:', req.body);
-      console.log('Files:', req.files);
+      if (req.files && req.files.attachment_voice) {
+        const voicePath = `/uploads/inquiries/${req.files.attachment_voice[0].filename}`;
+        const fullPath = `public${voicePath}`;
+        req.body.attachment_voice = voicePath;
+
+        console.log('🎤 음성 파일 처리:');
+        console.log('   - 저장 경로:', fullPath);
+        console.log('   - DB 경로:', voicePath);
+        console.log('   - 파일 크기:', req.files.attachment_voice[0].size, 'bytes');
+
+        // 파일 실제 저장 확인
+        if (fs.existsSync(fullPath)) {
+          console.log('   ✅ 파일이 실제로 저장되었습니다!');
+        } else {
+          console.log('   ❌ 파일이 저장되지 않았습니다!');
+        }
+      }
+
+      console.log('📋 최종 Body:', req.body);
 
       next();
     });
   } else {
+    console.log('📄 JSON 요청 - multer 미적용');
     // JSON 요청인 경우 그대로 진행
     next();
   }
