@@ -38,13 +38,30 @@ const fileFilter = (req, file, cb) => {
   console.log('원본 파일명:', file.originalname);
   console.log('확장자:', extension);
 
-  if (file.fieldname === 'attachment_image' && allowedImageTypes.includes(extension)) {
+  // 단일 파일 업로드 (file 필드명 - 확장자로 타입 결정)
+  if (file.fieldname === 'file') {
+    if (allowedImageTypes.includes(extension)) {
+      console.log('✅ 이미지 파일 허용 (file)');
+      cb(null, true);
+    } else if (allowedAudioTypes.includes(extension)) {
+      console.log('✅ 음성 파일 허용 (file)');
+      cb(null, true);
+    } else {
+      console.log('❌ 파일 거부 - 지원하지 않는 확장자:', extension);
+      cb(new Error(`지원하지 않는 파일 형식입니다. 확장자: ${extension}`), false);
+    }
+  }
+  // 이미지 필드 (attachment_image 또는 image)
+  else if ((file.fieldname === 'attachment_image' || file.fieldname === 'image') && allowedImageTypes.includes(extension)) {
     console.log('✅ 이미지 파일 허용');
     cb(null, true);
-  } else if (file.fieldname === 'attachment_voice' && allowedAudioTypes.includes(extension)) {
+  }
+  // 음성 필드 (attachment_voice 또는 voice)
+  else if ((file.fieldname === 'attachment_voice' || file.fieldname === 'voice') && allowedAudioTypes.includes(extension)) {
     console.log('✅ 음성 파일 허용');
     cb(null, true);
-  } else {
+  }
+  else {
     console.log('❌ 파일 거부 - 필드명:', file.fieldname, '확장자:', extension);
     cb(new Error(`지원하지 않는 파일입니다. 필드명: ${file.fieldname}, 확장자: ${extension}`), false);
   }
@@ -541,10 +558,104 @@ router.get('/stats/summary', authenticateToken, async (req, res) => {
 });
 
 /**
+ * POST /api/inquiries/upload-image
+ * 문의사항 이미지 업로드 (단일 필드)
+ */
+router.post('/upload-image', authenticateToken, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return errorResponse(
+        res,
+        '업로드할 이미지가 없습니다.',
+        RESPONSE_CODES.VALIDATION_ERROR,
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+
+    const imageUrl = `/uploads/inquiries/${req.file.filename}`;
+
+    successResponse(res, '이미지 업로드가 완료되었습니다.', {
+      attachment_image: imageUrl,
+      url: imageUrl,
+      filename: req.file.filename,
+      size: req.file.size,
+      mimetype: req.file.mimetype
+    });
+
+  } catch (error) {
+    console.error('이미지 업로드 에러:', error);
+
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      return errorResponse(
+        res,
+        '파일 크기가 너무 큽니다. 최대 10MB까지 업로드 가능합니다.',
+        RESPONSE_CODES.VALIDATION_ERROR,
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+
+    errorResponse(
+      res,
+      '이미지 업로드 중 오류가 발생했습니다.',
+      RESPONSE_CODES.DATABASE_ERROR,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
+  }
+});
+
+/**
+ * POST /api/inquiries/upload-voice
+ * 문의사항 음성 업로드 (단일 필드)
+ */
+router.post('/upload-voice', authenticateToken, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return errorResponse(
+        res,
+        '업로드할 음성 파일이 없습니다.',
+        RESPONSE_CODES.VALIDATION_ERROR,
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+
+    const voiceUrl = `/uploads/inquiries/${req.file.filename}`;
+
+    successResponse(res, '음성 파일 업로드가 완료되었습니다.', {
+      attachment_voice: voiceUrl,
+      url: voiceUrl,
+      filename: req.file.filename,
+      size: req.file.size,
+      mimetype: req.file.mimetype
+    });
+
+  } catch (error) {
+    console.error('음성 파일 업로드 에러:', error);
+
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      return errorResponse(
+        res,
+        '파일 크기가 너무 큽니다. 최대 10MB까지 업로드 가능합니다.',
+        RESPONSE_CODES.VALIDATION_ERROR,
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+
+    errorResponse(
+      res,
+      '음성 파일 업로드 중 오류가 발생했습니다.',
+      RESPONSE_CODES.DATABASE_ERROR,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
+  }
+});
+
+/**
  * POST /api/inquiries/upload
- * 문의사항 첨부파일 업로드
+ * 문의사항 첨부파일 업로드 (다중 필드)
  */
 router.post('/upload', authenticateToken, upload.fields([
+  { name: 'attachment_image', maxCount: 1 },
+  { name: 'attachment_voice', maxCount: 1 },
   { name: 'image', maxCount: 1 },
   { name: 'voice', maxCount: 1 }
 ]), async (req, res) => {
@@ -552,12 +663,22 @@ router.post('/upload', authenticateToken, upload.fields([
     const files = req.files;
     const uploadedFiles = {};
 
-    if (files.image && files.image[0]) {
+    // attachment_image 또는 image 필드명 지원
+    if (files.attachment_image && files.attachment_image[0]) {
+      uploadedFiles.attachment_image = `/uploads/inquiries/${files.attachment_image[0].filename}`;
+      uploadedFiles.image = uploadedFiles.attachment_image; // 호환성
+    } else if (files.image && files.image[0]) {
       uploadedFiles.image = `/uploads/inquiries/${files.image[0].filename}`;
+      uploadedFiles.attachment_image = uploadedFiles.image; // 호환성
     }
 
-    if (files.voice && files.voice[0]) {
+    // attachment_voice 또는 voice 필드명 지원
+    if (files.attachment_voice && files.attachment_voice[0]) {
+      uploadedFiles.attachment_voice = `/uploads/inquiries/${files.attachment_voice[0].filename}`;
+      uploadedFiles.voice = uploadedFiles.attachment_voice; // 호환성
+    } else if (files.voice && files.voice[0]) {
       uploadedFiles.voice = `/uploads/inquiries/${files.voice[0].filename}`;
+      uploadedFiles.attachment_voice = uploadedFiles.voice; // 호환성
     }
 
     if (Object.keys(uploadedFiles).length === 0) {
