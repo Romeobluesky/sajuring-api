@@ -639,10 +639,10 @@ router.get('/stats/summary', authenticateToken, async (req, res) => {
     const userId = req.user.id;
 
     const [stats] = await pool.execute(
-      `SELECT 
+      `SELECT
        inquiries_state,
        COUNT(*) as count
-       FROM inquiries 
+       FROM inquiries
        WHERE user_id = ?
        GROUP BY inquiries_state`,
       [userId]
