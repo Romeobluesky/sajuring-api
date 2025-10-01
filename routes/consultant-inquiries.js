@@ -16,14 +16,23 @@ const CONSULTANT_INQUIRY_STATUS = {
 
 /**
  * POST /api/consultant-inquiries
- * 상담사 문의사항 등록 (상담사만 가능)
+ * 상담사에게 문의사항 등록 (일반 사용자가 상담사에게 문의)
  */
-router.post('/', authenticateToken, requireRole(['CONSULT']), async (req, res) => {
+router.post('/', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
-    const { content } = req.body;
+    const { consultant_id, content } = req.body;
 
     // 필수 필드 검증
+    if (!consultant_id) {
+      return errorResponse(
+        res,
+        '상담사 ID를 입력해주세요.',
+        RESPONSE_CODES.VALIDATION_ERROR,
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+
     if (!content || content.trim().length === 0) {
       return errorResponse(
         res,
@@ -43,12 +52,24 @@ router.post('/', authenticateToken, requireRole(['CONSULT']), async (req, res) =
       );
     }
 
-    // 사용자 정보 조회 (consultant_id와 nickname 가져오기)
+    // 상담사 존재 확인
+    const [consultants] = await pool.execute(
+      'SELECT consultant_number FROM consultants WHERE consultant_number = ?',
+      [consultant_id]
+    );
+
+    if (consultants.length === 0) {
+      return errorResponse(
+        res,
+        '해당 상담사를 찾을 수 없습니다.',
+        RESPONSE_CODES.NOT_FOUND,
+        HTTP_STATUS.NOT_FOUND
+      );
+    }
+
+    // 사용자 정보 조회
     const [users] = await pool.execute(
-      `SELECT u.id, u.username, c.consultant_number
-       FROM users u
-       LEFT JOIN consultants c ON u.id = c.user_id
-       WHERE u.id = ?`,
+      'SELECT username FROM users WHERE id = ?',
       [userId]
     );
 
@@ -63,22 +84,13 @@ router.post('/', authenticateToken, requireRole(['CONSULT']), async (req, res) =
 
     const user = users[0];
 
-    if (!user.consultant_number) {
-      return errorResponse(
-        res,
-        '상담사 정보를 찾을 수 없습니다.',
-        RESPONSE_CODES.NOT_FOUND,
-        HTTP_STATUS.NOT_FOUND
-      );
-    }
-
     // 문의사항 등록
     const [result] = await pool.execute(
       `INSERT INTO consultant_inquiries (user_id, consultant_id, nickname, content, status, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, NOW(), NOW())`,
       [
         userId,
-        user.consultant_number,
+        consultant_id,
         user.username,
         content,
         CONSULTANT_INQUIRY_STATUS.PENDING
@@ -90,7 +102,7 @@ router.post('/', authenticateToken, requireRole(['CONSULT']), async (req, res) =
     successResponse(res, '문의사항이 등록되었습니다.', {
       inquiry: {
         id: inquiryId,
-        consultant_id: user.consultant_number,
+        consultant_id: consultant_id,
         nickname: user.username,
         content: content,
         status: CONSULTANT_INQUIRY_STATUS.PENDING
@@ -110,9 +122,9 @@ router.post('/', authenticateToken, requireRole(['CONSULT']), async (req, res) =
 
 /**
  * GET /api/consultant-inquiries
- * 내 상담사 문의사항 목록 조회 (상담사 본인)
+ * 내가 작성한 문의사항 목록 조회 (일반 사용자 본인)
  */
-router.get('/', authenticateToken, requireRole(['CONSULT']), validatePagination, async (req, res) => {
+router.get('/', authenticateToken, validatePagination, async (req, res) => {
   try {
     const userId = req.user.id;
     const {
@@ -310,9 +322,9 @@ router.get('/:id', authenticateToken, validateId, async (req, res) => {
 
 /**
  * PUT /api/consultant-inquiries/:id
- * 상담사 문의사항 수정 (답변 전만 가능, 상담사 본인만)
+ * 문의사항 수정 (답변 전만 가능, 작성자 본인만)
  */
-router.put('/:id', authenticateToken, requireRole(['CONSULT']), validateId, async (req, res) => {
+router.put('/:id', authenticateToken, validateId, async (req, res) => {
   try {
     const inquiryId = req.params.id;
     const userId = req.user.id;
@@ -396,9 +408,9 @@ router.put('/:id', authenticateToken, requireRole(['CONSULT']), validateId, asyn
 
 /**
  * DELETE /api/consultant-inquiries/:id
- * 상담사 문의사항 삭제 (답변 전만 가능, 상담사 본인만)
+ * 문의사항 삭제 (답변 전만 가능, 작성자 본인만)
  */
-router.delete('/:id', authenticateToken, requireRole(['CONSULT']), validateId, async (req, res) => {
+router.delete('/:id', authenticateToken, validateId, async (req, res) => {
   try {
     const inquiryId = req.params.id;
     const userId = req.user.id;
@@ -519,9 +531,9 @@ router.put('/:id/reply', authenticateToken, requireRole(['ADMIN']), validateId, 
 
 /**
  * GET /api/consultant-inquiries/stats/summary
- * 내 상담사 문의사항 통계 (상태별 개수)
+ * 내 문의사항 통계 (상태별 개수)
  */
-router.get('/stats/summary', authenticateToken, requireRole(['CONSULT']), async (req, res) => {
+router.get('/stats/summary', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
 

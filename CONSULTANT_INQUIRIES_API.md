@@ -1,6 +1,6 @@
 # Consultant Inquiries API Documentation
 
-상담사 전용 문의사항 API 엔드포인트
+일반 사용자가 상담사에게 문의하는 API 엔드포인트
 
 ## Base URL
 ```
@@ -13,14 +13,17 @@
 Authorization: Bearer <token>
 ```
 
+## 개요
+이 API는 **일반 사용자(USER)**가 특정 상담사에게 문의를 보내고 관리하는 기능을 제공합니다.
+
 ## Database Schema
 
 ```sql
 consultant_inquiries
 ├── id (int, PK, auto_increment)
-├── user_id (int, FK to users.id)
-├── consultant_id (int, FK to consultants.consultant_number)
-├── nickname (varchar(50))
+├── user_id (int, FK to users.id) - 문의 작성자
+├── consultant_id (int, FK to consultants.consultant_number) - 문의 대상 상담사
+├── nickname (varchar(50)) - 작성자 닉네임
 ├── content (varchar(30)) - 문의 내용
 ├── status (enum: 'pending', 'answered')
 ├── reply_content (text) - 관리자 답변
@@ -32,14 +35,15 @@ consultant_inquiries
 
 ## API Endpoints
 
-### 1. 상담사 문의사항 등록
+### 1. 상담사에게 문의사항 등록
 **POST** `/api/consultant-inquiries`
 
-**권한**: CONSULTANT
+**권한**: 인증된 모든 사용자 (USER, CONSULT, ADMIN)
 
 **Request Body**:
 ```json
 {
+  "consultant_id": 1,
   "content": "문의 내용 (최대 30자)"
 }
 ```
@@ -52,9 +56,9 @@ consultant_inquiries
   "data": {
     "inquiry": {
       "id": 1,
-      "consultant_id": 123,
+      "consultant_id": 1,
       "nickname": "홍길동",
-      "content": "문의 내용",
+      "content": "정산 문의드립니다",
       "status": "pending"
     }
   }
@@ -62,15 +66,16 @@ consultant_inquiries
 ```
 
 **Error Responses**:
-- `400`: 문의 내용 누락 또는 30자 초과
-- `404`: 상담사 정보를 찾을 수 없음
+- `400`: consultant_id 또는 content 누락
+- `400`: 문의 내용 30자 초과
+- `404`: 해당 상담사를 찾을 수 없음
 
 ---
 
-### 2. 내 상담사 문의사항 목록 조회
+### 2. 내가 작성한 문의사항 목록 조회
 **GET** `/api/consultant-inquiries`
 
-**권한**: CONSULTANT
+**권한**: 인증된 모든 사용자 (본인이 작성한 문의만 조회)
 
 **Query Parameters**:
 - `status` (optional): pending | answered
@@ -161,10 +166,10 @@ consultant_inquiries
 
 ---
 
-### 4. 상담사 문의사항 상세보기
+### 4. 문의사항 상세보기
 **GET** `/api/consultant-inquiries/:id`
 
-**권한**: CONSULTANT (본인), ADMIN
+**권한**: 작성자 본인 또는 ADMIN
 
 **Response** (200):
 ```json
@@ -196,10 +201,10 @@ consultant_inquiries
 
 ---
 
-### 5. 상담사 문의사항 수정
+### 5. 문의사항 수정
 **PUT** `/api/consultant-inquiries/:id`
 
-**권한**: CONSULTANT (본인만)
+**권한**: 작성자 본인만 (답변 전만 수정 가능)
 
 **Request Body**:
 ```json
@@ -233,10 +238,10 @@ consultant_inquiries
 
 ---
 
-### 6. 상담사 문의사항 삭제
+### 6. 문의사항 삭제
 **DELETE** `/api/consultant-inquiries/:id`
 
-**권한**: CONSULTANT (본인만)
+**권한**: 작성자 본인만 (답변 전만 삭제 가능)
 
 **Response** (200):
 ```json
@@ -252,7 +257,7 @@ consultant_inquiries
 
 ---
 
-### 7. 상담사 문의사항 답변 등록 (관리자 전용)
+### 7. 문의사항 답변 등록 (관리자 전용)
 **PUT** `/api/consultant-inquiries/:id/reply`
 
 **권한**: ADMIN
@@ -291,10 +296,10 @@ consultant_inquiries
 
 ---
 
-### 8. 내 상담사 문의사항 통계
+### 8. 내 문의사항 통계
 **GET** `/api/consultant-inquiries/stats/summary`
 
-**권한**: CONSULTANT
+**권한**: 인증된 모든 사용자
 
 **Response** (200):
 ```json
@@ -325,26 +330,27 @@ consultant_inquiries
 
 ## Notes
 
-1. **상담사 전용**: 이 API는 CONSULTANT 역할을 가진 사용자만 사용할 수 있습니다.
-2. **문의 내용 제한**: content 필드는 최대 30자까지만 허용됩니다.
-3. **수정/삭제 제한**: 답변이 완료된 문의사항은 수정 및 삭제가 불가능합니다.
-4. **관리자 답변**: 답변은 관리자(ADMIN)만 등록할 수 있습니다.
-5. **자동 매핑**: user_id와 consultant_id는 JWT 토큰에서 자동으로 매핑됩니다.
+1. **사용자 대상**: 이 API는 **일반 사용자(USER)**가 특정 상담사에게 문의하기 위한 기능입니다.
+2. **필수 필드**: 문의 등록 시 `consultant_id`(문의할 상담사)와 `content`(문의 내용) 필수
+3. **문의 내용 제한**: content 필드는 최대 30자까지만 허용됩니다.
+4. **수정/삭제 제한**: 답변이 완료된 문의사항은 수정 및 삭제가 불가능합니다.
+5. **관리자 답변**: 답변은 관리자(ADMIN)만 등록할 수 있습니다.
+6. **본인 조회만**: 각 사용자는 자신이 작성한 문의사항만 조회/수정/삭제 가능합니다.
 
 ## Example Usage
 
-### 상담사 문의 등록
+### 상담사에게 문의 등록 (일반 사용자)
 ```bash
 curl -X POST http://localhost:3013/api/consultant-inquiries \
-  -H "Authorization: Bearer <consultant_token>" \
+  -H "Authorization: Bearer <user_token>" \
   -H "Content-Type: application/json" \
-  -d '{"content": "정산 관련 문의드립니다."}'
+  -d '{"consultant_id": 1, "content": "정산 관련 문의드립니다."}'
 ```
 
 ### 내 문의사항 조회
 ```bash
 curl -X GET "http://localhost:3013/api/consultant-inquiries?status=pending&page=1&limit=10" \
-  -H "Authorization: Bearer <consultant_token>"
+  -H "Authorization: Bearer <user_token>"
 ```
 
 ### 관리자 답변 등록
