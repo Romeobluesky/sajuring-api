@@ -281,6 +281,12 @@ router.get('/by-consultant/:consultantId', authenticateToken, validatePagination
       limit = PAGINATION.DEFAULT_LIMIT
     } = req.query;
 
+    console.log('=== by-consultant 엔드포인트 디버깅 ===');
+    console.log('consultantId (param):', req.params.consultantId);
+    console.log('consultantId (parsed):', consultantId);
+    console.log('userId:', userId);
+    console.log('userRole:', userRole);
+
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
     const offset = (pageNum - 1) * limitNum;
@@ -296,12 +302,17 @@ router.get('/by-consultant/:consultantId', authenticateToken, validatePagination
 
     const whereClause = whereConditions.join(' AND ');
 
+    console.log('WHERE 절:', whereClause);
+    console.log('Query Params:', queryParams);
+
     // 전체 개수 조회
     const [countResult] = await pool.execute(
       `SELECT COUNT(*) as total FROM consultant_inquiries ci WHERE ${whereClause}`,
       queryParams
     );
     const total = countResult[0].total;
+
+    console.log('조회된 문의 개수:', total);
 
     // 문의사항 목록 조회 (상담사 정보 JOIN)
     const [inquiries] = await pool.execute(
@@ -316,6 +327,9 @@ router.get('/by-consultant/:consultantId', authenticateToken, validatePagination
        LIMIT ${limitNum} OFFSET ${offset}`,
       queryParams
     );
+
+    console.log('조회된 문의 목록:', inquiries.map(i => ({ id: i.id, consultant_id: i.consultant_id, nickname: i.nickname })));
+    console.log('=========================================');
 
     // 비밀글 처리: 관리자가 아니고 본인이 작성하지 않은 문의는 비밀글로 표시
     const processedInquiries = inquiries.map(inquiry => {
