@@ -18,7 +18,7 @@ const CONSULTANT_INQUIRY_STATUS = {
  * POST /api/consultant-inquiries
  * 상담사 문의사항 등록 (상담사만 가능)
  */
-router.post('/', authenticateToken, requireRole(['CONSULTANT']), async (req, res) => {
+router.post('/', authenticateToken, requireRole(['CONSULT']), async (req, res) => {
   try {
     const userId = req.user.id;
     const { content } = req.body;
@@ -112,7 +112,7 @@ router.post('/', authenticateToken, requireRole(['CONSULTANT']), async (req, res
  * GET /api/consultant-inquiries
  * 내 상담사 문의사항 목록 조회 (상담사 본인)
  */
-router.get('/', authenticateToken, requireRole(['CONSULTANT']), validatePagination, async (req, res) => {
+router.get('/', authenticateToken, requireRole(['CONSULT']), validatePagination, async (req, res) => {
   try {
     const userId = req.user.id;
     const {
@@ -259,7 +259,7 @@ router.get('/:id', authenticateToken, validateId, async (req, res) => {
     const inquiryId = req.params.id;
     const userId = req.user.id;
     const isAdmin = req.user.role === 'ADMIN';
-    const isConsultant = req.user.role === 'CONSULTANT';
+    const isConsultant = req.user.role === 'CONSULT';
 
     // 본인 문의사항 또는 관리자만 조회 가능
     let whereClause = 'ci.id = ?';
@@ -312,7 +312,7 @@ router.get('/:id', authenticateToken, validateId, async (req, res) => {
  * PUT /api/consultant-inquiries/:id
  * 상담사 문의사항 수정 (답변 전만 가능, 상담사 본인만)
  */
-router.put('/:id', authenticateToken, requireRole(['CONSULTANT']), validateId, async (req, res) => {
+router.put('/:id', authenticateToken, requireRole(['CONSULT']), validateId, async (req, res) => {
   try {
     const inquiryId = req.params.id;
     const userId = req.user.id;
@@ -398,7 +398,7 @@ router.put('/:id', authenticateToken, requireRole(['CONSULTANT']), validateId, a
  * DELETE /api/consultant-inquiries/:id
  * 상담사 문의사항 삭제 (답변 전만 가능, 상담사 본인만)
  */
-router.delete('/:id', authenticateToken, requireRole(['CONSULTANT']), validateId, async (req, res) => {
+router.delete('/:id', authenticateToken, requireRole(['CONSULT']), validateId, async (req, res) => {
   try {
     const inquiryId = req.params.id;
     const userId = req.user.id;
@@ -521,7 +521,7 @@ router.put('/:id/reply', authenticateToken, requireRole(['ADMIN']), validateId, 
  * GET /api/consultant-inquiries/stats/summary
  * 내 상담사 문의사항 통계 (상태별 개수)
  */
-router.get('/stats/summary', authenticateToken, requireRole(['CONSULTANT']), async (req, res) => {
+router.get('/stats/summary', authenticateToken, requireRole(['CONSULT']), async (req, res) => {
   try {
     const userId = req.user.id;
 
