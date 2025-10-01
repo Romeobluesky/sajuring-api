@@ -349,7 +349,7 @@ router.get('/by-consultant/:consultantId', authenticateToken, validatePagination
         id: inquiry.id,
         user_id: null,  // 숨김
         consultant_id: inquiry.consultant_id,
-        nickname: inquiry.consultant_stagename,  // 상담사 활동명 표시
+        nickname: inquiry.nickname,  // 작성자의 닉네임은 표시
         content: '비밀글입니다',  // 숨김
         status: inquiry.status,
         reply_content: null,  // 숨김
