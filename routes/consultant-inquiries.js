@@ -67,9 +67,9 @@ router.post('/', authenticateToken, async (req, res) => {
       );
     }
 
-    // 사용자 정보 조회
+    // 사용자 정보 조회 (nickname 포함)
     const [users] = await pool.execute(
-      'SELECT username FROM users WHERE id = ?',
+      'SELECT username, nickname FROM users WHERE id = ?',
       [userId]
     );
 
@@ -91,7 +91,7 @@ router.post('/', authenticateToken, async (req, res) => {
       [
         userId,
         consultant_id,
-        user.username,
+        user.nickname || user.username,  // nickname 우선, 없으면 username
         content,
         CONSULTANT_INQUIRY_STATUS.PENDING
       ]
@@ -103,7 +103,7 @@ router.post('/', authenticateToken, async (req, res) => {
       inquiry: {
         id: inquiryId,
         consultant_id: consultant_id,
-        nickname: user.username,
+        nickname: user.nickname || user.username,
         content: content,
         status: CONSULTANT_INQUIRY_STATUS.PENDING
       }
