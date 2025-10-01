@@ -138,11 +138,11 @@ router.get('/', authenticateToken, validatePagination, async (req, res) => {
     const offset = (pageNum - 1) * limitNum;
 
     // WHERE 조건 구성
-    let whereConditions = ['user_id = ?'];
+    let whereConditions = ['ci.user_id = ?'];
     let queryParams = [userId];
 
     if (status) {
-      whereConditions.push('status = ?');
+      whereConditions.push('ci.status = ?');
       queryParams.push(status);
     }
 
@@ -150,18 +150,21 @@ router.get('/', authenticateToken, validatePagination, async (req, res) => {
 
     // 전체 개수 조회
     const [countResult] = await pool.execute(
-      `SELECT COUNT(*) as total FROM consultant_inquiries WHERE ${whereClause}`,
+      `SELECT COUNT(*) as total FROM consultant_inquiries ci WHERE ${whereClause}`,
       queryParams
     );
     const total = countResult[0].total;
 
-    // 문의사항 목록 조회
+    // 문의사항 목록 조회 (상담사 정보 JOIN)
     const [inquiries] = await pool.execute(
-      `SELECT id, consultant_id, nickname, content, status,
-       reply_content, replied_at, created_at, updated_at
-       FROM consultant_inquiries
+      `SELECT ci.id, ci.consultant_id, ci.nickname, ci.content, ci.status,
+       ci.reply_content, ci.replied_at, ci.created_at, ci.updated_at,
+       c.name as consultant_nickname,
+       c.stage_name as consultant_stagename
+       FROM consultant_inquiries ci
+       LEFT JOIN consultants c ON ci.consultant_id = c.id
        WHERE ${whereClause}
-       ORDER BY created_at DESC
+       ORDER BY ci.created_at DESC
        LIMIT ${limitNum} OFFSET ${offset}`,
       queryParams
     );
