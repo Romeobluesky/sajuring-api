@@ -233,11 +233,10 @@ router.get('/all', authenticateToken, requireRole(['ADMIN']), validatePagination
     const [inquiries] = await pool.execute(
       `SELECT ci.id, ci.user_id, ci.consultant_id, ci.nickname, ci.content,
        ci.status, ci.reply_content, ci.replied_at, ci.created_at, ci.updated_at,
-       c.stage_name as consultant_stage_name,
-       u.email as consultant_email, u.phone as consultant_phone
+       c.name as consultant_nickname,
+       c.stage_name as consultant_stagename
        FROM consultant_inquiries ci
-       LEFT JOIN consultants c ON ci.consultant_id = c.consultant_number
-       LEFT JOIN users u ON ci.user_id = u.id
+       LEFT JOIN consultants c ON ci.consultant_id = c.id
        ${whereClause}
        ORDER BY ci.created_at DESC
        LIMIT ${limitNum} OFFSET ${offset}`,
@@ -256,6 +255,111 @@ router.get('/all', authenticateToken, requireRole(['ADMIN']), validatePagination
 
   } catch (error) {
     console.error('전체 상담사 문의사항 목록 조회 에러:', error);
+    errorResponse(
+      res,
+      '문의사항 목록 조회 중 오류가 발생했습니다.',
+      RESPONSE_CODES.DATABASE_ERROR,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
+  }
+});
+
+/**
+ * GET /api/consultant-inquiries/by-consultant/:consultantId
+ * 특정 상담사의 문의 목록 조회 (상담사 프로필 페이지용)
+ * - 로그인한 사용자가 작성한 문의만 전체 공개
+ * - 다른 사용자가 작성한 문의는 비밀글 처리
+ */
+router.get('/by-consultant/:consultantId', authenticateToken, validatePagination, async (req, res) => {
+  try {
+    const consultantId = parseInt(req.params.consultantId);
+    const userId = req.user.id;
+    const userRole = req.user.role;
+    const {
+      status = null,
+      page = PAGINATION.DEFAULT_PAGE,
+      limit = PAGINATION.DEFAULT_LIMIT
+    } = req.query;
+
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const offset = (pageNum - 1) * limitNum;
+
+    // WHERE 조건 구성
+    let whereConditions = ['ci.consultant_id = ?'];
+    let queryParams = [consultantId];
+
+    if (status) {
+      whereConditions.push('ci.status = ?');
+      queryParams.push(status);
+    }
+
+    const whereClause = whereConditions.join(' AND ');
+
+    // 전체 개수 조회
+    const [countResult] = await pool.execute(
+      `SELECT COUNT(*) as total FROM consultant_inquiries ci WHERE ${whereClause}`,
+      queryParams
+    );
+    const total = countResult[0].total;
+
+    // 문의사항 목록 조회 (상담사 정보 JOIN)
+    const [inquiries] = await pool.execute(
+      `SELECT ci.id, ci.user_id, ci.consultant_id, ci.nickname, ci.content,
+       ci.status, ci.reply_content, ci.replied_at, ci.created_at, ci.updated_at,
+       c.name as consultant_nickname,
+       c.stage_name as consultant_stagename
+       FROM consultant_inquiries ci
+       LEFT JOIN consultants c ON ci.consultant_id = c.id
+       WHERE ${whereClause}
+       ORDER BY ci.created_at DESC
+       LIMIT ${limitNum} OFFSET ${offset}`,
+      queryParams
+    );
+
+    // 비밀글 처리: 관리자가 아니고 본인이 작성하지 않은 문의는 비밀글로 표시
+    const processedInquiries = inquiries.map(inquiry => {
+      const isAdmin = userRole === 'ADMIN';
+      const isMyInquiry = inquiry.user_id === userId;  // 로그인한 사용자가 작성한 문의인지 확인
+
+      // 관리자 또는 본인이 작성한 문의인 경우 전체 공개
+      if (isAdmin || isMyInquiry) {
+        return {
+          ...inquiry,
+          is_private: false
+        };
+      }
+
+      // 다른 사용자가 작성한 문의는 비밀글 처리
+      return {
+        id: inquiry.id,
+        user_id: null,  // 숨김
+        consultant_id: inquiry.consultant_id,
+        nickname: '***',  // 숨김
+        content: '비밀글입니다',  // 숨김
+        status: inquiry.status,
+        reply_content: null,  // 숨김
+        replied_at: inquiry.replied_at,
+        created_at: inquiry.created_at,
+        updated_at: inquiry.updated_at,
+        consultant_nickname: inquiry.consultant_nickname,
+        consultant_stagename: inquiry.consultant_stagename,
+        is_private: true
+      };
+    });
+
+    const pagination = createPagination(pageNum, limitNum, total);
+
+    successResponse(res, '상담사 문의사항 목록 조회 완료', {
+      inquiries: processedInquiries,
+      consultant_id: consultantId,
+      filters: {
+        status
+      }
+    }, pagination);
+
+  } catch (error) {
+    console.error('상담사별 문의사항 목록 조회 에러:', error);
     errorResponse(
       res,
       '문의사항 목록 조회 중 오류가 발생했습니다.',
