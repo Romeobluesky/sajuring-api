@@ -352,7 +352,7 @@ router.get('/by-consultant/:consultantId', authenticateToken, validatePagination
         nickname: inquiry.nickname,  // 작성자의 닉네임은 표시
         content: '비밀글입니다',  // 숨김
         status: inquiry.status,
-        reply_content: null,  // 숨김
+        reply_content: inquiry.reply_content ? '비밀글입니다' : null,  // 답변이 있으면 비밀글 표시
         replied_at: inquiry.replied_at,
         created_at: inquiry.created_at,
         updated_at: inquiry.updated_at,
