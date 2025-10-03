@@ -62,7 +62,7 @@ router.get('/', optionalAuth, async (req, res) => {
 
     // 상담사 목록 조회 (상담 횟수와 리뷰 횟수 포함)
     const [consultants] = await pool.execute(
-      `SELECT c.id, c.consultant_number, c.name, c.nickname, c.stage_name, c.phone, c.email,
+      `SELECT c.id, c.user_id, c.consultant_number, c.name, c.nickname, c.stage_name, c.phone, c.email,
        c.profile_image, c.intro_images, c.introduction, c.one_line_introduction, c.career, c.grade, c.consultant_grade,
        c.consultation_field, c.consultation_fee, c.rings, c.consultation_rate, c.status,
        c.specialties, c.consultation_styles, c.event_selected, c.ring_expert, c.shorts_connected, c.created_at, c.updated_at,
