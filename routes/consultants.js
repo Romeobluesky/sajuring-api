@@ -1,4 +1,7 @@
 const express = require('express');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const { pool } = require('../config/database');
 const { optionalAuth, authenticateToken } = require('../middleware/auth');
 const { validateId, validatePagination } = require('../middleware/validation');
@@ -6,6 +9,37 @@ const { successResponse, errorResponse, safeJsonParse, createPagination } = requ
 const { RESPONSE_CODES, HTTP_STATUS, PAGINATION } = require('../utils/constants');
 
 const router = express.Router();
+
+// Multer 설정 (상담사 공지 이미지 업로드)
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '../uploads/consultant_notices');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'consultant-notice-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB 제한
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|gif/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+
+    if (extname && mimetype) {
+      return cb(null, true);
+    } else {
+      cb(new Error('이미지 파일만 업로드 가능합니다 (jpeg, jpg, png, gif)'));
+    }
+  }
+});
 
 /**
  * GET /api/consultants
@@ -997,6 +1031,306 @@ router.get('/search', optionalAuth, validatePagination, async (req, res) => {
       res,
       '상담사 검색 중 오류가 발생했습니다.',
       RESPONSE_CODES.DATABASE_ERROR,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
+  }
+});
+
+/**
+ * GET /api/consultants/:consultantId/notice
+ * 상담사 공지 조회
+ */
+router.get('/:consultantId/notice', optionalAuth, validateId, async (req, res) => {
+  try {
+    const { consultantId } = req.params;
+
+    // 상담사 존재 확인
+    const [consultants] = await pool.execute(
+      'SELECT id FROM consultants WHERE id = ?',
+      [consultantId]
+    );
+
+    if (consultants.length === 0) {
+      return errorResponse(
+        res,
+        '상담사를 찾을 수 없습니다.',
+        RESPONSE_CODES.NOT_FOUND,
+        HTTP_STATUS.NOT_FOUND
+      );
+    }
+
+    // 공지 조회
+    const [notices] = await pool.execute(
+      `SELECT * FROM notices
+       WHERE type = 'consultant_notice'
+       AND consultant_id = ?
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [consultantId]
+    );
+
+    if (notices.length === 0) {
+      return errorResponse(
+        res,
+        '공지사항이 없습니다.',
+        RESPONSE_CODES.NOT_FOUND,
+        HTTP_STATUS.NOT_FOUND
+      );
+    }
+
+    const notice = notices[0];
+    notice.images = safeJsonParse(notice.images, []);
+
+    successResponse(res, '상담사 공지 조회 완료', {
+      notice
+    });
+
+  } catch (error) {
+    console.error('상담사 공지 조회 에러:', error);
+    errorResponse(
+      res,
+      '상담사 공지 조회 중 오류가 발생했습니다.',
+      RESPONSE_CODES.DATABASE_ERROR,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
+  }
+});
+
+/**
+ * POST /api/consultants/:consultantId/notice
+ * 상담사 공지 저장/수정
+ */
+router.post('/:consultantId/notice', authenticateToken, validateId, async (req, res) => {
+  try {
+    const { consultantId } = req.params;
+    const { content, images } = req.body;
+
+    if (!content || content.trim() === '') {
+      return errorResponse(
+        res,
+        '공지 내용을 입력해주세요.',
+        RESPONSE_CODES.VALIDATION_ERROR,
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+
+    // 상담사 존재 확인 및 권한 확인
+    const [consultants] = await pool.execute(
+      'SELECT id, user_id FROM consultants WHERE id = ?',
+      [consultantId]
+    );
+
+    if (consultants.length === 0) {
+      return errorResponse(
+        res,
+        '상담사를 찾을 수 없습니다.',
+        RESPONSE_CODES.NOT_FOUND,
+        HTTP_STATUS.NOT_FOUND
+      );
+    }
+
+    const consultant = consultants[0];
+
+    // 본인 확인 (상담사 본인이거나 관리자만 수정 가능)
+    if (req.user.id !== consultant.user_id && req.user.role !== 'ADMIN') {
+      return errorResponse(
+        res,
+        '권한이 없습니다.',
+        RESPONSE_CODES.FORBIDDEN,
+        HTTP_STATUS.FORBIDDEN
+      );
+    }
+
+    const imagesJson = images && images.length > 0 ? JSON.stringify(images) : null;
+
+    // 기존 공지 확인
+    const [existingNotices] = await pool.execute(
+      `SELECT id FROM notices
+       WHERE type = 'consultant_notice'
+       AND consultant_id = ?`,
+      [consultantId]
+    );
+
+    if (existingNotices.length > 0) {
+      // UPDATE
+      await pool.execute(
+        `UPDATE notices
+         SET content = ?, images = ?, updated_at = NOW()
+         WHERE id = ?`,
+        [content, imagesJson, existingNotices[0].id]
+      );
+
+      successResponse(res, '상담사 공지가 수정되었습니다.', {
+        notice_id: existingNotices[0].id
+      });
+    } else {
+      // INSERT
+      const [result] = await pool.execute(
+        `INSERT INTO notices (type, consultant_id, content, images, created_at, updated_at)
+         VALUES ('consultant_notice', ?, ?, ?, NOW(), NOW())`,
+        [consultantId, content, imagesJson]
+      );
+
+      successResponse(res, '상담사 공지가 저장되었습니다.', {
+        notice_id: result.insertId
+      });
+    }
+
+  } catch (error) {
+    console.error('상담사 공지 저장 에러:', error);
+    errorResponse(
+      res,
+      '상담사 공지 저장 중 오류가 발생했습니다.',
+      RESPONSE_CODES.DATABASE_ERROR,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
+  }
+});
+
+/**
+ * POST /api/consultants/:consultantId/notice/upload-image
+ * 상담사 공지 이미지 업로드
+ */
+router.post('/:consultantId/notice/upload-image', authenticateToken, validateId, upload.single('image'), async (req, res) => {
+  try {
+    const { consultantId } = req.params;
+
+    if (!req.file) {
+      return errorResponse(
+        res,
+        '이미지 파일을 업로드해주세요.',
+        RESPONSE_CODES.VALIDATION_ERROR,
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+
+    // 상담사 존재 확인 및 권한 확인
+    const [consultants] = await pool.execute(
+      'SELECT id, user_id FROM consultants WHERE id = ?',
+      [consultantId]
+    );
+
+    if (consultants.length === 0) {
+      // 업로드된 파일 삭제
+      fs.unlinkSync(req.file.path);
+      return errorResponse(
+        res,
+        '상담사를 찾을 수 없습니다.',
+        RESPONSE_CODES.NOT_FOUND,
+        HTTP_STATUS.NOT_FOUND
+      );
+    }
+
+    const consultant = consultants[0];
+
+    // 본인 확인
+    if (req.user.id !== consultant.user_id && req.user.role !== 'ADMIN') {
+      // 업로드된 파일 삭제
+      fs.unlinkSync(req.file.path);
+      return errorResponse(
+        res,
+        '권한이 없습니다.',
+        RESPONSE_CODES.FORBIDDEN,
+        HTTP_STATUS.FORBIDDEN
+      );
+    }
+
+    const imageUrl = `/uploads/consultant_notices/${req.file.filename}`;
+
+    successResponse(res, '이미지 업로드 완료', {
+      url: imageUrl,
+      filename: req.file.filename
+    });
+
+  } catch (error) {
+    console.error('이미지 업로드 에러:', error);
+    // 업로드된 파일이 있으면 삭제
+    if (req.file && req.file.path) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (unlinkError) {
+        console.error('파일 삭제 실패:', unlinkError);
+      }
+    }
+    errorResponse(
+      res,
+      '이미지 업로드 중 오류가 발생했습니다.',
+      RESPONSE_CODES.SERVER_ERROR,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
+  }
+});
+
+/**
+ * DELETE /api/consultants/:consultantId/notice/delete-image
+ * 상담사 공지 이미지 삭제
+ */
+router.delete('/:consultantId/notice/delete-image', authenticateToken, validateId, async (req, res) => {
+  try {
+    const { consultantId } = req.params;
+    const { filename } = req.body;
+
+    if (!filename) {
+      return errorResponse(
+        res,
+        '파일명을 입력해주세요.',
+        RESPONSE_CODES.VALIDATION_ERROR,
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+
+    // 상담사 존재 확인 및 권한 확인
+    const [consultants] = await pool.execute(
+      'SELECT id, user_id FROM consultants WHERE id = ?',
+      [consultantId]
+    );
+
+    if (consultants.length === 0) {
+      return errorResponse(
+        res,
+        '상담사를 찾을 수 없습니다.',
+        RESPONSE_CODES.NOT_FOUND,
+        HTTP_STATUS.NOT_FOUND
+      );
+    }
+
+    const consultant = consultants[0];
+
+    // 본인 확인
+    if (req.user.id !== consultant.user_id && req.user.role !== 'ADMIN') {
+      return errorResponse(
+        res,
+        '권한이 없습니다.',
+        RESPONSE_CODES.FORBIDDEN,
+        HTTP_STATUS.FORBIDDEN
+      );
+    }
+
+    // 파일 경로 검증 (경로 조작 방지)
+    const safeFilename = path.basename(filename);
+    const filePath = path.join(__dirname, '../uploads/consultant_notices', safeFilename);
+
+    // 파일 존재 확인 및 삭제
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      successResponse(res, '이미지가 삭제되었습니다.', {
+        filename: safeFilename
+      });
+    } else {
+      return errorResponse(
+        res,
+        '파일을 찾을 수 없습니다.',
+        RESPONSE_CODES.NOT_FOUND,
+        HTTP_STATUS.NOT_FOUND
+      );
+    }
+
+  } catch (error) {
+    console.error('이미지 삭제 에러:', error);
+    errorResponse(
+      res,
+      '이미지 삭제 중 오류가 발생했습니다.',
+      RESPONSE_CODES.SERVER_ERROR,
       HTTP_STATUS.INTERNAL_SERVER_ERROR
     );
   }
