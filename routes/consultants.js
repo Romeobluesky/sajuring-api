@@ -150,7 +150,7 @@ router.get('/popular', optionalAuth, async (req, res) => {
     const limitNum = Math.min(parseInt(limit) || 10, 50);
 
     const [consultants] = await pool.execute(
-      `SELECT c.id, c.consultant_number, c.name, c.nickname, c.stage_name,
+      `SELECT c.id, c.user_id, c.consultant_number, c.name, c.nickname, c.stage_name,
        c.profile_image, c.introduction, c.one_line_introduction, c.grade, c.consultant_grade,
        c.consultation_field, c.consultation_fee, c.consultation_rate, c.status,
        c.specialties, c.consultation_styles, c.event_selected, c.ring_expert, c.shorts_connected,
@@ -204,7 +204,7 @@ router.get('/events', optionalAuth, async (req, res) => {
     const limitNum = Math.min(parseInt(limit) || 20, 50);
 
     const [consultants] = await pool.execute(
-      `SELECT c.id, c.consultant_number, c.name, c.nickname, c.stage_name,
+      `SELECT c.id, c.user_id, c.consultant_number, c.name, c.nickname, c.stage_name,
        c.profile_image, c.introduction, c.one_line_introduction, c.grade, c.consultant_grade,
        c.consultation_field, c.consultation_fee, c.consultation_rate, c.status,
        c.specialties, c.consultation_styles, c.event_selected, c.ring_expert, c.shorts_connected,
@@ -425,7 +425,7 @@ router.get('/consultant-events/:id', optionalAuth, validateId, async (req, res) 
       const placeholders = consultantIds.map(() => '?').join(',');
 
       const [consultants] = await pool.execute(
-        `SELECT c.id, c.consultant_number, c.name, c.nickname, c.stage_name,
+        `SELECT c.id, c.user_id, c.consultant_number, c.name, c.nickname, c.stage_name,
          c.profile_image, c.intro_images, c.introduction, c.one_line_introduction,
          c.career, c.grade, c.consultant_grade, c.consultation_field, c.consultation_fee,
          c.consultation_rate, c.status, c.specialties, c.consultation_styles,
@@ -836,7 +836,7 @@ router.get('/field/:field', optionalAuth, async (req, res) => {
 
     // 상담사 목록 조회 (상담 횟수와 리뷰 횟수 포함)
     const [consultants] = await pool.execute(
-      `SELECT c.id, c.consultant_number, c.name, c.nickname, c.stage_name,
+      `SELECT c.id, c.user_id, c.consultant_number, c.name, c.nickname, c.stage_name,
        c.profile_image, c.introduction, c.one_line_introduction, c.grade, c.consultant_grade,
        c.consultation_field, c.consultation_fee, c.consultation_rate, c.status,
        c.specialties, c.consultation_styles, c.event_selected, c.ring_expert, c.shorts_connected,
