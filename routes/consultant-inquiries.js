@@ -4,7 +4,7 @@ const { authenticateToken } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleCheck');
 const { validateId, validatePagination } = require('../middleware/validation');
 const { successResponse, errorResponse, createPagination } = require('../utils/helpers');
-const { RESPONSE_CODES, HTTP_STATUS, PAGINATION } = require('../utils/constants');
+const { RESPONSE_CODES, HTTP_STATUS, PAGINATION, USER_ROLES } = require('../utils/constants');
 
 const router = express.Router();
 
@@ -333,17 +333,17 @@ const getConsultantInquiriesHandler = async (req, res) => {
 
     console.log('조회된 문의 목록:', inquiries.map(i => ({ id: i.id, consultant_id: i.consultant_id, nickname: i.nickname })));
 
-    // 로그인한 사용자가 상담사인 경우 해당 상담사의 consultant_id 조회
+    // 로그인한 사용자가 상담사인지 확인 (role과 관계없이 consultants 테이블에서 확인)
     let loggedInConsultantId = null;
-    if (userRole === 'CONSULT') {
-      const [consultantInfo] = await pool.execute(
-        'SELECT consultant_number FROM consultants WHERE user_id = ?',
-        [userId]
-      );
-      if (consultantInfo.length > 0) {
-        loggedInConsultantId = consultantInfo[0].consultant_number;
-        console.log('로그인한 상담사의 consultant_number:', loggedInConsultantId);
-      }
+    const [consultantInfo] = await pool.execute(
+      'SELECT consultant_number FROM consultants WHERE user_id = ?',
+      [userId]
+    );
+    if (consultantInfo.length > 0) {
+      loggedInConsultantId = consultantInfo[0].consultant_number;
+      console.log('로그인한 사용자는 상담사입니다. consultant_number:', loggedInConsultantId);
+    } else {
+      console.log('로그인한 사용자는 상담사가 아닙니다.');
     }
 
     console.log('=========================================');
