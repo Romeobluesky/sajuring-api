@@ -801,7 +801,16 @@ router.put('/:id/status', authenticateToken, validateId, async (req, res) => {
     const isAdmin = req.user.role_level === 10;
     const isOwner = req.user.id === consultant.user_id;
 
-    // 상담사 본인이거나 관리자만 수정 가능
+    // 디버깅 로그
+    console.log('=== 권한 체크 디버깅 ===');
+    console.log('req.user.id:', req.user.id);
+    console.log('req.user.role_level:', req.user.role_level);
+    console.log('consultant.user_id:', consultant.user_id);
+    console.log('isConsultantRole:', isConsultantRole);
+    console.log('isOwner:', isOwner);
+    console.log('isAdmin:', isAdmin);
+
+    // 상담사(role_level=8) 본인이거나, 관리자(role_level=10)만 수정 가능
     if (!(isConsultantRole && isOwner) && !isAdmin) {
       return errorResponse(
         res,

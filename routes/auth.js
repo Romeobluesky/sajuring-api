@@ -162,7 +162,8 @@ router.post('/login', (req, res, next) => {
         login_id: user.login_id,
         username: user.username,
         email: user.email,
-        role: user.role
+        role: user.role,
+        role_level: user.role_level
       },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN }
