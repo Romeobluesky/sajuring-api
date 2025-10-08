@@ -755,6 +755,90 @@ router.post('/consultant-events/:id/leave', authenticateToken, validateId, async
 });
 
 /**
+ * PUT /api/consultants/:id/status
+ * 상담사 상태 업데이트 (본인 또는 관리자만 가능)
+ * - waiting: 대기중 (토글 ON)
+ * - away: 부재중 (토글 OFF)
+ * - consulting: 상담중 (통화 시스템에서 자동 설정)
+ * - suspended: 정지 (관리자만 설정 가능)
+ */
+router.put('/:id/status', authenticateToken, validateId, async (req, res) => {
+  try {
+    const consultantId = req.params.id;
+    const { status } = req.body;
+
+    // 상태 검증
+    const validStatuses = ['waiting', 'away', 'consulting', 'suspended'];
+    if (!status || !validStatuses.includes(status)) {
+      return errorResponse(
+        res,
+        '유효하지 않은 상태입니다. (waiting, away, consulting, suspended 중 선택)',
+        RESPONSE_CODES.VALIDATION_ERROR,
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+
+    // 상담사 존재 확인 및 권한 확인
+    const [consultants] = await pool.execute(
+      'SELECT id, user_id, status as current_status FROM consultants WHERE id = ?',
+      [consultantId]
+    );
+
+    if (consultants.length === 0) {
+      return errorResponse(
+        res,
+        '상담사를 찾을 수 없습니다.',
+        RESPONSE_CODES.NOT_FOUND,
+        HTTP_STATUS.NOT_FOUND
+      );
+    }
+
+    const consultant = consultants[0];
+
+    // 본인 확인 (상담사 본인이거나 관리자만 수정 가능)
+    if (req.user.id !== consultant.user_id && req.user.role !== 'ADMIN') {
+      return errorResponse(
+        res,
+        '권한이 없습니다.',
+        RESPONSE_CODES.FORBIDDEN,
+        HTTP_STATUS.FORBIDDEN
+      );
+    }
+
+    // suspended 상태는 관리자만 설정 가능
+    if (status === 'suspended' && req.user.role !== 'ADMIN') {
+      return errorResponse(
+        res,
+        '정지 상태는 관리자만 설정할 수 있습니다.',
+        RESPONSE_CODES.FORBIDDEN,
+        HTTP_STATUS.FORBIDDEN
+      );
+    }
+
+    // 상태 업데이트
+    await pool.execute(
+      'UPDATE consultants SET status = ?, updated_at = NOW() WHERE id = ?',
+      [status, consultantId]
+    );
+
+    successResponse(res, '상담사 상태가 업데이트되었습니다.', {
+      consultant_id: consultantId,
+      previous_status: consultant.current_status,
+      new_status: status
+    });
+
+  } catch (error) {
+    console.error('상담사 상태 업데이트 에러:', error);
+    errorResponse(
+      res,
+      '상담사 상태 업데이트 중 오류가 발생했습니다.',
+      RESPONSE_CODES.DATABASE_ERROR,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
+  }
+});
+
+/**
  * GET /api/consultants/:id
  * 상담사 상세 정보 조회
  */
@@ -1331,90 +1415,6 @@ router.delete('/:consultantId/notice/delete-image', authenticateToken, validateI
       res,
       '이미지 삭제 중 오류가 발생했습니다.',
       RESPONSE_CODES.SERVER_ERROR,
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    );
-  }
-});
-
-/**
- * PUT /api/consultants/:id/status
- * 상담사 상태 업데이트 (본인 또는 관리자만 가능)
- * - waiting: 대기중 (토글 ON)
- * - away: 부재중 (토글 OFF)
- * - consulting: 상담중 (통화 시스템에서 자동 설정)
- * - suspended: 정지 (관리자만 설정 가능)
- */
-router.put('/:id/status', authenticateToken, validateId, async (req, res) => {
-  try {
-    const consultantId = req.params.id;
-    const { status } = req.body;
-
-    // 상태 검증
-    const validStatuses = ['waiting', 'away', 'consulting', 'suspended'];
-    if (!status || !validStatuses.includes(status)) {
-      return errorResponse(
-        res,
-        '유효하지 않은 상태입니다. (waiting, away, consulting, suspended 중 선택)',
-        RESPONSE_CODES.VALIDATION_ERROR,
-        HTTP_STATUS.BAD_REQUEST
-      );
-    }
-
-    // 상담사 존재 확인 및 권한 확인
-    const [consultants] = await pool.execute(
-      'SELECT id, user_id, status as current_status FROM consultants WHERE id = ?',
-      [consultantId]
-    );
-
-    if (consultants.length === 0) {
-      return errorResponse(
-        res,
-        '상담사를 찾을 수 없습니다.',
-        RESPONSE_CODES.NOT_FOUND,
-        HTTP_STATUS.NOT_FOUND
-      );
-    }
-
-    const consultant = consultants[0];
-
-    // 본인 확인 (상담사 본인이거나 관리자만 수정 가능)
-    if (req.user.id !== consultant.user_id && req.user.role !== 'ADMIN') {
-      return errorResponse(
-        res,
-        '권한이 없습니다.',
-        RESPONSE_CODES.FORBIDDEN,
-        HTTP_STATUS.FORBIDDEN
-      );
-    }
-
-    // suspended 상태는 관리자만 설정 가능
-    if (status === 'suspended' && req.user.role !== 'ADMIN') {
-      return errorResponse(
-        res,
-        '정지 상태는 관리자만 설정할 수 있습니다.',
-        RESPONSE_CODES.FORBIDDEN,
-        HTTP_STATUS.FORBIDDEN
-      );
-    }
-
-    // 상태 업데이트
-    await pool.execute(
-      'UPDATE consultants SET status = ?, updated_at = NOW() WHERE id = ?',
-      [status, consultantId]
-    );
-
-    successResponse(res, '상담사 상태가 업데이트되었습니다.', {
-      consultant_id: consultantId,
-      previous_status: consultant.current_status,
-      new_status: status
-    });
-
-  } catch (error) {
-    console.error('상담사 상태 업데이트 에러:', error);
-    errorResponse(
-      res,
-      '상담사 상태 업데이트 중 오류가 발생했습니다.',
-      RESPONSE_CODES.DATABASE_ERROR,
       HTTP_STATUS.INTERNAL_SERVER_ERROR
     );
   }
