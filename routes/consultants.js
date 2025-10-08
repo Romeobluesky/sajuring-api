@@ -812,7 +812,7 @@ router.put('/:id/status', authenticateToken, validateId, async (req, res) => {
     console.log('isAdmin:', isAdmin);
 
     // 상담사(role_level=8) 본인이거나, 관리자(role_level=10)만 수정 가능
-    if (!(isConsultantRole && isOwner) && !isAdmin) {
+    if (!(isConsultantRole && isOwner) || !isAdmin) {
       return errorResponse(
         res,
         '권한이 없습니다.',
