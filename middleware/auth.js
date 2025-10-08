@@ -25,7 +25,7 @@ const authenticateToken = async (req, res, next) => {
 
     // 사용자 정보 조회 및 상태 확인
     const [users] = await pool.execute(
-      'SELECT id, username, email, nickname, role, status, role_level FROM users WHERE id = ?',
+      'SELECT id, login_id, username, email, nickname, role, status, role_level FROM users WHERE id = ?',
       [decoded.userId]
     );
 
@@ -53,6 +53,7 @@ const authenticateToken = async (req, res, next) => {
     // 요청 객체에 사용자 정보 추가
     req.user = {
       id: user.id,
+      login_id: user.login_id,
       username: user.username,
       email: user.email,
       nickname: user.nickname,
@@ -108,13 +109,14 @@ const optionalAuth = async (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
     const [users] = await pool.execute(
-      'SELECT id, username, email, nickname, role, status, role_level FROM users WHERE id = ? AND status = ?',
+      'SELECT id, login_id, username, email, nickname, role, status, role_level FROM users WHERE id = ? AND status = ?',
       [decoded.userId, USER_STATUS.ACTIVE]
     );
 
     if (users.length > 0) {
       req.user = {
         id: users[0].id,
+        login_id: users[0].login_id,
         username: users[0].username,
         email: users[0].email,
         nickname: users[0].nickname,
