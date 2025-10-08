@@ -329,15 +329,30 @@ router.get('/by-consultant/:consultantId', authenticateToken, validatePagination
     );
 
     console.log('조회된 문의 목록:', inquiries.map(i => ({ id: i.id, consultant_id: i.consultant_id, nickname: i.nickname })));
+
+    // 로그인한 사용자가 상담사인 경우 해당 상담사의 consultant_id 조회
+    let loggedInConsultantId = null;
+    if (userRole === 'CONSULT') {
+      const [consultantInfo] = await pool.execute(
+        'SELECT consultant_number FROM consultants WHERE user_id = ?',
+        [userId]
+      );
+      if (consultantInfo.length > 0) {
+        loggedInConsultantId = consultantInfo[0].consultant_number;
+        console.log('로그인한 상담사의 consultant_number:', loggedInConsultantId);
+      }
+    }
+
     console.log('=========================================');
 
-    // 비밀글 처리: 관리자가 아니고 본인이 작성하지 않은 문의는 비밀글로 표시
+    // 비밀글 처리: 관리자가 아니고, 본인이 작성하지 않았으며, 본인에게 온 문의가 아닌 경우 비밀글로 표시
     const processedInquiries = inquiries.map(inquiry => {
       const isAdmin = userRole === 'ADMIN';
       const isMyInquiry = inquiry.user_id === userId;  // 로그인한 사용자가 작성한 문의인지 확인
+      const isMyConsultantInquiry = loggedInConsultantId && inquiry.consultant_id === loggedInConsultantId;  // 상담사 본인에게 온 문의인지 확인
 
-      // 관리자 또는 본인이 작성한 문의인 경우 전체 공개
-      if (isAdmin || isMyInquiry) {
+      // 관리자, 본인이 작성한 문의, 또는 상담사 본인에게 온 문의인 경우 전체 공개
+      if (isAdmin || isMyInquiry || isMyConsultantInquiry) {
         return {
           ...inquiry,
           is_private: false
