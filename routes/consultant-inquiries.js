@@ -162,7 +162,7 @@ router.get('/', authenticateToken, validatePagination, async (req, res) => {
        c.name as consultant_nickname,
        c.stage_name as consultant_stagename
        FROM consultant_inquiries ci
-       LEFT JOIN consultants c ON ci.consultant_id = c.id
+       LEFT JOIN consultants c ON ci.consultant_id = c.consultant_number
        WHERE ${whereClause}
        ORDER BY ci.created_at DESC
        LIMIT ${limitNum} OFFSET ${offset}`,
@@ -236,7 +236,7 @@ router.get('/all', authenticateToken, requireRole(['ADMIN']), validatePagination
        c.name as consultant_nickname,
        c.stage_name as consultant_stagename
        FROM consultant_inquiries ci
-       LEFT JOIN consultants c ON ci.consultant_id = c.id
+       LEFT JOIN consultants c ON ci.consultant_id = c.consultant_number
        ${whereClause}
        ORDER BY ci.created_at DESC
        LIMIT ${limitNum} OFFSET ${offset}`,
@@ -321,7 +321,7 @@ router.get('/by-consultant/:consultantId', authenticateToken, validatePagination
        c.name as consultant_nickname,
        c.stage_name as consultant_stagename
        FROM consultant_inquiries ci
-       LEFT JOIN consultants c ON ci.consultant_id = c.id
+       LEFT JOIN consultants c ON ci.consultant_id = c.consultant_number
        WHERE ${whereClause}
        ORDER BY ci.created_at DESC
        LIMIT ${limitNum} OFFSET ${offset}`,
