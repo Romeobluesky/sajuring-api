@@ -336,12 +336,12 @@ const getConsultantInquiriesHandler = async (req, res) => {
     // 로그인한 사용자가 상담사인지 확인 (role과 관계없이 consultants 테이블에서 확인)
     let loggedInConsultantId = null;
     const [consultantInfo] = await pool.execute(
-      'SELECT consultant_number FROM consultants WHERE user_id = ?',
+      'SELECT id FROM consultants WHERE user_id = ?',
       [userId]
     );
     if (consultantInfo.length > 0) {
-      loggedInConsultantId = consultantInfo[0].consultant_number;
-      console.log('로그인한 사용자는 상담사입니다. consultant_number:', loggedInConsultantId);
+      loggedInConsultantId = consultantInfo[0].id;
+      console.log('로그인한 사용자는 상담사입니다. consultant id:', loggedInConsultantId);
     } else {
       console.log('로그인한 사용자는 상담사가 아닙니다.');
     }
