@@ -265,12 +265,15 @@ router.get('/all', authenticateToken, requireRole(['ADMIN']), validatePagination
 });
 
 /**
- * GET /api/consultant-inquiries/by-consultant/:consultantId
+ * GET/PUT /api/consultant-inquiries/by-consultant/:consultantId
  * 특정 상담사의 문의 목록 조회 (상담사 프로필 페이지용)
  * - 로그인한 사용자가 작성한 문의만 전체 공개
+ * - 상담사 본인이 조회하는 경우 본인에게 온 문의 전체 공개
  * - 다른 사용자가 작성한 문의는 비밀글 처리
+ *
+ * GET과 PUT 메서드 모두 지원 (Flutter 앱 호환성)
  */
-router.get('/by-consultant/:consultantId', authenticateToken, validatePagination, async (req, res) => {
+const getConsultantInquiriesHandler = async (req, res) => {
   try {
     const consultantId = parseInt(req.params.consultantId);
     const userId = req.user.id;
@@ -396,7 +399,11 @@ router.get('/by-consultant/:consultantId', authenticateToken, validatePagination
       HTTP_STATUS.INTERNAL_SERVER_ERROR
     );
   }
-});
+};
+
+// GET과 PUT 메서드 모두 같은 핸들러 사용 (Flutter 앱 호환성)
+router.get('/by-consultant/:consultantId', authenticateToken, validatePagination, getConsultantInquiriesHandler);
+router.put('/by-consultant/:consultantId', authenticateToken, validatePagination, getConsultantInquiriesHandler);
 
 /**
  * GET /api/consultant-inquiries/:id
