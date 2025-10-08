@@ -1489,7 +1489,7 @@ router.put('/:id/consultation-fee', authenticateToken, validateId, async (req, r
     // 등급별 허용 상담료 옵션
     const gradeToFeeOptions = {
       '일반': [1000],
-      '파트너': [1000, 1200],
+      '파트너1': [1000, 1200],
       '파트너2': [1000, 1200],
       '파트너3': [1000, 1200, 1300],
       '파트너4': [1000, 1200, 1300, 1500],
