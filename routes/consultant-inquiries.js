@@ -333,17 +333,22 @@ const getConsultantInquiriesHandler = async (req, res) => {
 
     console.log('조회된 문의 목록:', inquiries.map(i => ({ id: i.id, consultant_id: i.consultant_id, nickname: i.nickname })));
 
-    // 로그인한 사용자가 상담사인지 확인 (role과 관계없이 consultants 테이블에서 확인)
+    // 로그인한 사용자가 상담사인지 확인 (consultants.user_id는 users.login_id를 참조함!)
     let loggedInConsultantId = null;
+    const userLoginId = req.user.login_id;  // JWT에서 login_id 가져오기
+
+    console.log(`[상담사 조회] login_id: ${userLoginId}로 consultants 테이블 조회 중...`);
     const [consultantInfo] = await pool.execute(
-      'SELECT id FROM consultants WHERE user_id = ?',
-      [userId]
+      'SELECT id, user_id, stage_name FROM consultants WHERE user_id = ?',
+      [userLoginId]  // users.id가 아닌 users.login_id로 조회!
     );
+    console.log(`[상담사 조회 결과] 조회된 데이터:`, consultantInfo);
+
     if (consultantInfo.length > 0) {
       loggedInConsultantId = consultantInfo[0].id;
-      console.log('로그인한 사용자는 상담사입니다. consultant id:', loggedInConsultantId);
+      console.log(`✅ 로그인한 사용자는 상담사입니다. consultant id: ${loggedInConsultantId}, stage_name: ${consultantInfo[0].stage_name}`);
     } else {
-      console.log('로그인한 사용자는 상담사가 아닙니다.');
+      console.log(`❌ 로그인한 사용자는 상담사가 아닙니다. (consultants 테이블에 user_id="${userLoginId}"가 없음)`);
     }
 
     console.log('=========================================');
