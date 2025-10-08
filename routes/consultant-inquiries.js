@@ -614,10 +614,310 @@ router.delete('/:id', authenticateToken, validateId, async (req, res) => {
 });
 
 /**
+ * POST /api/consultant-inquiries/:id/reply
+ * 상담사 문의사항 답변 등록 (상담사 본인)
+ */
+router.post('/:id/reply', authenticateToken, validateId, async (req, res) => {
+  try {
+    const inquiryId = req.params.id;
+    const { reply_content } = req.body;
+    const userLoginId = req.user.login_id;
+
+    // 필수 필드 검증
+    if (!reply_content || reply_content.trim().length === 0) {
+      return errorResponse(
+        res,
+        '답변 내용을 입력해주세요.',
+        RESPONSE_CODES.VALIDATION_ERROR,
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+
+    // 답변 내용 길이 검증 (30자 제한)
+    if (reply_content.length > 30) {
+      return errorResponse(
+        res,
+        '답변 내용은 30자 이내로 입력해주세요.',
+        RESPONSE_CODES.VALIDATION_ERROR,
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+
+    // 로그인한 사용자의 상담사 ID 조회
+    const [consultantInfo] = await pool.execute(
+      'SELECT id FROM consultants WHERE user_id = ?',
+      [userLoginId]
+    );
+
+    if (consultantInfo.length === 0) {
+      return errorResponse(
+        res,
+        '상담사 계정이 아닙니다.',
+        RESPONSE_CODES.AUTHORIZATION_ERROR,
+        HTTP_STATUS.FORBIDDEN
+      );
+    }
+
+    const loggedInConsultantId = consultantInfo[0].id;
+
+    // 문의사항 존재 확인 및 권한 검증
+    const [inquiries] = await pool.execute(
+      'SELECT id, consultant_id, status FROM consultant_inquiries WHERE id = ?',
+      [inquiryId]
+    );
+
+    if (inquiries.length === 0) {
+      return errorResponse(
+        res,
+        '문의사항을 찾을 수 없습니다.',
+        RESPONSE_CODES.NOT_FOUND,
+        HTTP_STATUS.NOT_FOUND
+      );
+    }
+
+    const inquiry = inquiries[0];
+
+    // 본인에게 온 문의인지 확인
+    if (inquiry.consultant_id !== loggedInConsultantId) {
+      return errorResponse(
+        res,
+        '본인에게 온 문의에만 답변할 수 있습니다.',
+        RESPONSE_CODES.AUTHORIZATION_ERROR,
+        HTTP_STATUS.FORBIDDEN
+      );
+    }
+
+    // 답변 등록
+    await pool.execute(
+      `UPDATE consultant_inquiries
+       SET reply_content = ?, status = ?, replied_at = NOW(), updated_at = NOW()
+       WHERE id = ?`,
+      [reply_content, CONSULTANT_INQUIRY_STATUS.ANSWERED, inquiryId]
+    );
+
+    // 답변이 등록된 문의사항 조회
+    const [updatedInquiries] = await pool.execute(
+      `SELECT id, reply_content, replied_at, status
+       FROM consultant_inquiries
+       WHERE id = ?`,
+      [inquiryId]
+    );
+
+    successResponse(res, '답변이 등록되었습니다.', updatedInquiries[0]);
+
+  } catch (error) {
+    console.error('상담사 문의사항 답변 등록 에러:', error);
+    errorResponse(
+      res,
+      '답변 등록 중 오류가 발생했습니다.',
+      RESPONSE_CODES.DATABASE_ERROR,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
+  }
+});
+
+/**
  * PUT /api/consultant-inquiries/:id/reply
+ * 상담사 문의사항 답변 수정 (상담사 본인)
+ */
+router.put('/:id/reply', authenticateToken, validateId, async (req, res) => {
+  try {
+    const inquiryId = req.params.id;
+    const { reply_content } = req.body;
+    const userLoginId = req.user.login_id;
+
+    // 필수 필드 검증
+    if (!reply_content || reply_content.trim().length === 0) {
+      return errorResponse(
+        res,
+        '답변 내용을 입력해주세요.',
+        RESPONSE_CODES.VALIDATION_ERROR,
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+
+    // 답변 내용 길이 검증 (30자 제한)
+    if (reply_content.length > 30) {
+      return errorResponse(
+        res,
+        '답변 내용은 30자 이내로 입력해주세요.',
+        RESPONSE_CODES.VALIDATION_ERROR,
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+
+    // 로그인한 사용자의 상담사 ID 조회
+    const [consultantInfo] = await pool.execute(
+      'SELECT id FROM consultants WHERE user_id = ?',
+      [userLoginId]
+    );
+
+    if (consultantInfo.length === 0) {
+      return errorResponse(
+        res,
+        '상담사 계정이 아닙니다.',
+        RESPONSE_CODES.AUTHORIZATION_ERROR,
+        HTTP_STATUS.FORBIDDEN
+      );
+    }
+
+    const loggedInConsultantId = consultantInfo[0].id;
+
+    // 문의사항 존재 확인 및 권한 검증
+    const [inquiries] = await pool.execute(
+      'SELECT id, consultant_id, reply_content FROM consultant_inquiries WHERE id = ?',
+      [inquiryId]
+    );
+
+    if (inquiries.length === 0) {
+      return errorResponse(
+        res,
+        '문의사항을 찾을 수 없습니다.',
+        RESPONSE_CODES.NOT_FOUND,
+        HTTP_STATUS.NOT_FOUND
+      );
+    }
+
+    const inquiry = inquiries[0];
+
+    // 본인에게 온 문의인지 확인
+    if (inquiry.consultant_id !== loggedInConsultantId) {
+      return errorResponse(
+        res,
+        '본인에게 온 문의의 답변만 수정할 수 있습니다.',
+        RESPONSE_CODES.AUTHORIZATION_ERROR,
+        HTTP_STATUS.FORBIDDEN
+      );
+    }
+
+    // 답변이 없는 경우
+    if (!inquiry.reply_content) {
+      return errorResponse(
+        res,
+        '수정할 답변이 존재하지 않습니다.',
+        RESPONSE_CODES.VALIDATION_ERROR,
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+
+    // 답변 수정
+    await pool.execute(
+      `UPDATE consultant_inquiries
+       SET reply_content = ?, updated_at = NOW()
+       WHERE id = ?`,
+      [reply_content, inquiryId]
+    );
+
+    // 수정된 답변 조회
+    const [updatedInquiries] = await pool.execute(
+      `SELECT id, reply_content, replied_at, status
+       FROM consultant_inquiries
+       WHERE id = ?`,
+      [inquiryId]
+    );
+
+    successResponse(res, '답변이 수정되었습니다.', updatedInquiries[0]);
+
+  } catch (error) {
+    console.error('상담사 문의사항 답변 수정 에러:', error);
+    errorResponse(
+      res,
+      '답변 수정 중 오류가 발생했습니다.',
+      RESPONSE_CODES.DATABASE_ERROR,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
+  }
+});
+
+/**
+ * DELETE /api/consultant-inquiries/:id/reply
+ * 상담사 문의사항 답변 삭제 (상담사 본인)
+ */
+router.delete('/:id/reply', authenticateToken, validateId, async (req, res) => {
+  try {
+    const inquiryId = req.params.id;
+    const userLoginId = req.user.login_id;
+
+    // 로그인한 사용자의 상담사 ID 조회
+    const [consultantInfo] = await pool.execute(
+      'SELECT id FROM consultants WHERE user_id = ?',
+      [userLoginId]
+    );
+
+    if (consultantInfo.length === 0) {
+      return errorResponse(
+        res,
+        '상담사 계정이 아닙니다.',
+        RESPONSE_CODES.AUTHORIZATION_ERROR,
+        HTTP_STATUS.FORBIDDEN
+      );
+    }
+
+    const loggedInConsultantId = consultantInfo[0].id;
+
+    // 문의사항 존재 확인 및 권한 검증
+    const [inquiries] = await pool.execute(
+      'SELECT id, consultant_id, reply_content FROM consultant_inquiries WHERE id = ?',
+      [inquiryId]
+    );
+
+    if (inquiries.length === 0) {
+      return errorResponse(
+        res,
+        '문의사항을 찾을 수 없습니다.',
+        RESPONSE_CODES.NOT_FOUND,
+        HTTP_STATUS.NOT_FOUND
+      );
+    }
+
+    const inquiry = inquiries[0];
+
+    // 본인에게 온 문의인지 확인
+    if (inquiry.consultant_id !== loggedInConsultantId) {
+      return errorResponse(
+        res,
+        '본인에게 온 문의의 답변만 삭제할 수 있습니다.',
+        RESPONSE_CODES.AUTHORIZATION_ERROR,
+        HTTP_STATUS.FORBIDDEN
+      );
+    }
+
+    // 답변이 없는 경우
+    if (!inquiry.reply_content) {
+      return errorResponse(
+        res,
+        '삭제할 답변이 존재하지 않습니다.',
+        RESPONSE_CODES.VALIDATION_ERROR,
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+
+    // 답변 삭제 (NULL로 설정하고 상태를 pending으로 변경)
+    await pool.execute(
+      `UPDATE consultant_inquiries
+       SET reply_content = NULL, replied_at = NULL, status = ?, updated_at = NOW()
+       WHERE id = ?`,
+      [CONSULTANT_INQUIRY_STATUS.PENDING, inquiryId]
+    );
+
+    successResponse(res, '답변이 삭제되었습니다.');
+
+  } catch (error) {
+    console.error('상담사 문의사항 답변 삭제 에러:', error);
+    errorResponse(
+      res,
+      '답변 삭제 중 오류가 발생했습니다.',
+      RESPONSE_CODES.DATABASE_ERROR,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
+  }
+});
+
+/**
+ * PUT /api/consultant-inquiries/:id/admin-reply
  * 상담사 문의사항 답변 등록 (관리자 전용)
  */
-router.put('/:id/reply', authenticateToken, requireRole(['ADMIN']), validateId, async (req, res) => {
+router.put('/:id/admin-reply', authenticateToken, requireRole(['ADMIN']), validateId, async (req, res) => {
   try {
     const inquiryId = req.params.id;
     const { reply_content } = req.body;

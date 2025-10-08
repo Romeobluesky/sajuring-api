@@ -296,7 +296,134 @@ consultant_inquiries
 
 ---
 
-### 8. 내 문의사항 통계
+### 8. 상담사 답변 등록 (상담사 본인)
+**POST** `/api/consultant-inquiries/:id/reply`
+
+**권한**: 상담사 본인 (본인에게 온 문의만 가능)
+
+**Request Body**:
+```json
+{
+  "reply_content": "답변 내용 (최대 30자)"
+}
+```
+
+**Response** (200):
+```json
+{
+  "success": true,
+  "message": "답변이 등록되었습니다.",
+  "data": {
+    "id": 12,
+    "reply_content": "답변 내용입니다",
+    "replied_at": "2025-10-08T10:30:00.000Z",
+    "status": "answered"
+  }
+}
+```
+
+**Error Responses**:
+- `400`: 답변 내용 누락 또는 30자 초과
+- `403`: 상담사 계정이 아니거나 본인에게 온 문의가 아님
+- `404`: 문의사항을 찾을 수 없음
+
+---
+
+### 9. 상담사 답변 수정 (상담사 본인)
+**PUT** `/api/consultant-inquiries/:id/reply`
+
+**권한**: 상담사 본인 (본인이 작성한 답변만 가능)
+
+**Request Body**:
+```json
+{
+  "reply_content": "수정된 답변 내용 (최대 30자)"
+}
+```
+
+**Response** (200):
+```json
+{
+  "success": true,
+  "message": "답변이 수정되었습니다.",
+  "data": {
+    "id": 12,
+    "reply_content": "수정된 답변 내용",
+    "replied_at": "2025-10-08T10:30:00.000Z",
+    "status": "answered"
+  }
+}
+```
+
+**Error Responses**:
+- `400`: 답변 내용 누락, 30자 초과, 또는 수정할 답변이 없음
+- `403`: 상담사 계정이 아니거나 본인에게 온 문의가 아님
+- `404`: 문의사항을 찾을 수 없음
+
+---
+
+### 10. 상담사 답변 삭제 (상담사 본인)
+**DELETE** `/api/consultant-inquiries/:id/reply`
+
+**권한**: 상담사 본인 (본인이 작성한 답변만 가능)
+
+**Response** (200):
+```json
+{
+  "success": true,
+  "message": "답변이 삭제되었습니다."
+}
+```
+
+**Error Responses**:
+- `400`: 삭제할 답변이 없음
+- `403`: 상담사 계정이 아니거나 본인에게 온 문의가 아님
+- `404`: 문의사항을 찾을 수 없음
+
+**Note**: 답변 삭제 시 `reply_content`와 `replied_at`이 NULL로 설정되고 `status`가 'pending'으로 변경됩니다.
+
+---
+
+### 11. 관리자 답변 등록
+**PUT** `/api/consultant-inquiries/:id/admin-reply`
+
+**권한**: ADMIN
+
+**Request Body**:
+```json
+{
+  "reply_content": "관리자 답변 내용"
+}
+```
+
+**Response** (200):
+```json
+{
+  "success": true,
+  "message": "답변이 등록되었습니다.",
+  "data": {
+    "inquiry": {
+      "id": 1,
+      "consultant_id": 123,
+      "nickname": "홍길동",
+      "content": "문의 내용",
+      "status": "answered",
+      "reply_content": "관리자 답변 내용",
+      "replied_at": "2025-10-01T15:00:00.000Z",
+      "consultant_stage_name": "타로마스터"
+    }
+  }
+}
+```
+
+**Error Responses**:
+- `400`: 답변 내용 누락
+- `403`: 관리자 권한 없음
+- `404`: 문의사항을 찾을 수 없음
+
+---
+
+### 12. 내 문의사항 통계
 **GET** `/api/consultant-inquiries/stats/summary`
 
 **권한**: 인증된 모든 사용자
@@ -332,10 +459,12 @@ consultant_inquiries
 
 1. **사용자 대상**: 이 API는 **일반 사용자(USER)**가 특정 상담사에게 문의하기 위한 기능입니다.
 2. **필수 필드**: 문의 등록 시 `consultant_id`(문의할 상담사)와 `content`(문의 내용) 필수
-3. **문의 내용 제한**: content 필드는 최대 30자까지만 허용됩니다.
+3. **문의 내용 제한**: content 및 reply_content 필드는 최대 30자까지만 허용됩니다.
 4. **수정/삭제 제한**: 답변이 완료된 문의사항은 수정 및 삭제가 불가능합니다.
-5. **관리자 답변**: 답변은 관리자(ADMIN)만 등록할 수 있습니다.
-6. **본인 조회만**: 각 사용자는 자신이 작성한 문의사항만 조회/수정/삭제 가능합니다.
+5. **상담사 답변**: 상담사는 본인에게 온 문의에만 답변/수정/삭제가 가능합니다.
+6. **관리자 답변**: 관리자는 모든 문의에 답변할 수 있습니다 (별도 엔드포인트).
+7. **본인 조회만**: 각 사용자는 자신이 작성한 문의사항만 조회/수정/삭제 가능합니다.
+8. **비밀글 처리**: 상담사가 본인 프로필의 문의 목록을 조회할 때, 본인에게 온 문의는 실제 내용이 표시되고, 다른 사용자가 작성한 문의는 "비밀글입니다"로 표시됩니다.
 
 ## Example Usage
 
@@ -353,9 +482,31 @@ curl -X GET "http://localhost:3013/api/consultant-inquiries?status=pending&page=
   -H "Authorization: Bearer <user_token>"
 ```
 
+### 상담사 답변 등록 (상담사 본인)
+```bash
+curl -X POST http://localhost:3013/api/consultant-inquiries/12/reply \
+  -H "Authorization: Bearer <consultant_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"reply_content": "답변 내용입니다"}'
+```
+
+### 상담사 답변 수정 (상담사 본인)
+```bash
+curl -X PUT http://localhost:3013/api/consultant-inquiries/12/reply \
+  -H "Authorization: Bearer <consultant_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"reply_content": "수정된 답변 내용"}'
+```
+
+### 상담사 답변 삭제 (상담사 본인)
+```bash
+curl -X DELETE http://localhost:3013/api/consultant-inquiries/12/reply \
+  -H "Authorization: Bearer <consultant_token>"
+```
+
 ### 관리자 답변 등록
 ```bash
-curl -X PUT http://localhost:3013/api/consultant-inquiries/1/reply \
+curl -X PUT http://localhost:3013/api/consultant-inquiries/1/admin-reply \
   -H "Authorization: Bearer <admin_token>" \
   -H "Content-Type: application/json" \
   -d '{"reply_content": "정산은 매월 5일에 진행됩니다."}'
