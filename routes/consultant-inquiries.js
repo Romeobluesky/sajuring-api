@@ -354,6 +354,10 @@ const getConsultantInquiriesHandler = async (req, res) => {
       const isMyInquiry = inquiry.user_id === userId;  // 로그인한 사용자가 작성한 문의인지 확인
       const isMyConsultantInquiry = loggedInConsultantId && inquiry.consultant_id === loggedInConsultantId;  // 상담사 본인에게 온 문의인지 확인
 
+      console.log(`[문의 ID: ${inquiry.id}] isAdmin: ${isAdmin}, isMyInquiry: ${isMyInquiry}, isMyConsultantInquiry: ${isMyConsultantInquiry}`);
+      console.log(`  - loggedInConsultantId: ${loggedInConsultantId}, inquiry.consultant_id: ${inquiry.consultant_id}`);
+      console.log(`  - userId: ${userId}, inquiry.user_id: ${inquiry.user_id}`);
+
       // 관리자, 본인이 작성한 문의, 또는 상담사 본인에게 온 문의인 경우 전체 공개
       if (isAdmin || isMyInquiry || isMyConsultantInquiry) {
         return {
