@@ -1436,5 +1436,112 @@ router.delete('/:consultantId/notice/delete-image', authenticateToken, validateI
   }
 });
 
+/**
+ * PUT /api/consultants/:id/consultation-fee
+ * 상담료 변경 (상담사 본인만 가능)
+ */
+router.put('/:id/consultation-fee', authenticateToken, validateId, async (req, res) => {
+  try {
+    const consultantId = parseInt(req.params.id);
+    const { consultation_fee } = req.body;
+    const userLoginId = req.user.login_id;
+
+    // 필수 필드 검증
+    if (!consultation_fee || typeof consultation_fee !== 'number') {
+      return errorResponse(
+        res,
+        '상담료를 입력해주세요.',
+        RESPONSE_CODES.VALIDATION_ERROR,
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+
+    // 상담사 정보 조회
+    const [consultants] = await pool.execute(
+      'SELECT id, user_id, consultant_grade FROM consultants WHERE id = ?',
+      [consultantId]
+    );
+
+    if (consultants.length === 0) {
+      return errorResponse(
+        res,
+        '상담사를 찾을 수 없습니다.',
+        RESPONSE_CODES.NOT_FOUND,
+        HTTP_STATUS.NOT_FOUND
+      );
+    }
+
+    const consultant = consultants[0];
+
+    // 권한 확인: 본인 또는 관리자만 가능
+    const isOwner = consultant.user_id === userLoginId;
+    const isAdmin = req.user.role_level === 10;
+
+    if (!isOwner && !isAdmin) {
+      return errorResponse(
+        res,
+        '본인의 상담료만 변경할 수 있습니다.',
+        RESPONSE_CODES.AUTHORIZATION_ERROR,
+        HTTP_STATUS.FORBIDDEN
+      );
+    }
+
+    // 등급별 허용 상담료 옵션
+    const gradeToFeeOptions = {
+      '일반': [1000],
+      '파트너': [1000, 1200],
+      '파트너2': [1000, 1200],
+      '파트너3': [1000, 1200, 1300],
+      '파트너4': [1000, 1200, 1300, 1500],
+      '파트너5': [1000, 1200, 1300, 1500, 1600],
+      '파트너6': [1000, 1200, 1300, 1500, 1600, 1800]
+    };
+
+    // 등급에 맞는 상담료인지 검증
+    const allowedFees = gradeToFeeOptions[consultant.consultant_grade];
+
+    if (!allowedFees) {
+      return errorResponse(
+        res,
+        '유효하지 않은 등급입니다.',
+        RESPONSE_CODES.VALIDATION_ERROR,
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+
+    if (!allowedFees.includes(consultation_fee)) {
+      return errorResponse(
+        res,
+        `${consultant.consultant_grade} 등급은 ${allowedFees.join(', ')}링만 설정 가능합니다.`,
+        RESPONSE_CODES.VALIDATION_ERROR,
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+
+    // 상담료 변경
+    await pool.execute(
+      'UPDATE consultants SET consultation_fee = ?, updated_at = NOW() WHERE id = ?',
+      [consultation_fee, consultantId]
+    );
+
+    // 변경된 정보 조회
+    const [updatedConsultants] = await pool.execute(
+      'SELECT id, consultation_fee, updated_at FROM consultants WHERE id = ?',
+      [consultantId]
+    );
+
+    successResponse(res, '상담료가 변경되었습니다.', updatedConsultants[0]);
+
+  } catch (error) {
+    console.error('상담료 변경 에러:', error);
+    errorResponse(
+      res,
+      '상담료 변경 중 오류가 발생했습니다.',
+      RESPONSE_CODES.DATABASE_ERROR,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
+  }
+});
+
 
 module.exports = router;
