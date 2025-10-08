@@ -796,7 +796,11 @@ router.put('/:id/status', authenticateToken, validateId, async (req, res) => {
     const consultant = consultants[0];
 
     // 본인 확인 (상담사 본인이거나 관리자만 수정 가능)
-    if (req.user.id !== consultant.user_id && req.user.role !== 'ADMIN') {
+    // role_level: 8 = 상담사, 10 = 관리자
+    const isAdmin = req.user.role_level === 10;
+    const isOwner = req.user.id === consultant.user_id;
+
+    if (!isOwner && !isAdmin) {
       return errorResponse(
         res,
         '권한이 없습니다.',
@@ -806,7 +810,7 @@ router.put('/:id/status', authenticateToken, validateId, async (req, res) => {
     }
 
     // suspended 상태는 관리자만 설정 가능
-    if (status === 'suspended' && req.user.role !== 'ADMIN') {
+    if (status === 'suspended' && !isAdmin) {
       return errorResponse(
         res,
         '정지 상태는 관리자만 설정할 수 있습니다.',
