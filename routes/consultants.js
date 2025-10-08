@@ -1339,6 +1339,10 @@ router.delete('/:consultantId/notice/delete-image', authenticateToken, validateI
 /**
  * PUT /api/consultants/:id/status
  * 상담사 상태 업데이트 (본인 또는 관리자만 가능)
+ * - waiting: 대기중 (토글 ON)
+ * - away: 부재중 (토글 OFF)
+ * - consulting: 상담중 (통화 시스템에서 자동 설정)
+ * - suspended: 정지 (관리자만 설정 가능)
  */
 router.put('/:id/status', authenticateToken, validateId, async (req, res) => {
   try {
@@ -1346,11 +1350,11 @@ router.put('/:id/status', authenticateToken, validateId, async (req, res) => {
     const { status } = req.body;
 
     // 상태 검증
-    const validStatuses = ['active', 'inactive', 'busy', 'offline'];
+    const validStatuses = ['waiting', 'away', 'consulting', 'suspended'];
     if (!status || !validStatuses.includes(status)) {
       return errorResponse(
         res,
-        '유효하지 않은 상태입니다. (active, inactive, busy, offline 중 선택)',
+        '유효하지 않은 상태입니다. (waiting, away, consulting, suspended 중 선택)',
         RESPONSE_CODES.VALIDATION_ERROR,
         HTTP_STATUS.BAD_REQUEST
       );
@@ -1378,6 +1382,16 @@ router.put('/:id/status', authenticateToken, validateId, async (req, res) => {
       return errorResponse(
         res,
         '권한이 없습니다.',
+        RESPONSE_CODES.FORBIDDEN,
+        HTTP_STATUS.FORBIDDEN
+      );
+    }
+
+    // suspended 상태는 관리자만 설정 가능
+    if (status === 'suspended' && req.user.role !== 'ADMIN') {
+      return errorResponse(
+        res,
+        '정지 상태는 관리자만 설정할 수 있습니다.',
         RESPONSE_CODES.FORBIDDEN,
         HTTP_STATUS.FORBIDDEN
       );
