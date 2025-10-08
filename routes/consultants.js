@@ -797,10 +797,12 @@ router.put('/:id/status', authenticateToken, validateId, async (req, res) => {
 
     // 본인 확인 (상담사 본인이거나 관리자만 수정 가능)
     // role_level: 8 = 상담사, 10 = 관리자
+    const isConsultantRole = req.user.role_level === 8;
     const isAdmin = req.user.role_level === 10;
     const isOwner = req.user.id === consultant.user_id;
 
-    if (!isOwner && !isAdmin) {
+    // 상담사 본인이거나 관리자만 수정 가능
+    if (!(isConsultantRole && isOwner) && !isAdmin) {
       return errorResponse(
         res,
         '권한이 없습니다.',
