@@ -900,7 +900,7 @@ router.get('/:id/statistics', authenticateToken, validateId, async (req, res) =>
     const [consultationStats] = await pool.execute(
       `SELECT
          COUNT(*) as total_consultations,
-         COALESCE(SUM(consultation_duration), 0) as total_consultation_time
+         COALESCE(SUM(duration_time), 0) as total_consultation_time
        FROM consultations
        WHERE consultant_id = ?
        AND status = '완료'
