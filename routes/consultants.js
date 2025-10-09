@@ -755,100 +755,6 @@ router.post('/consultant-events/:id/leave', authenticateToken, validateId, async
 });
 
 /**
- * GET /api/consultants/:id/statistics
- * 상담사 통계 조회 (상담 횟수, 총 상담 시간, 부재 횟수)
- * Query params: start_date, end_date (옵션)
- */
-router.get('/:id/statistics', authenticateToken, validateId, async (req, res) => {
-  try {
-    const consultantId = req.params.id;
-    const { start_date, end_date } = req.query;
-
-    // 상담사 존재 확인
-    const [consultants] = await pool.execute(
-      'SELECT id, consultant_number FROM consultants WHERE id = ?',
-      [consultantId]
-    );
-
-    if (consultants.length === 0) {
-      return errorResponse(
-        res,
-        '상담사를 찾을 수 없습니다.',
-        RESPONSE_CODES.NOT_FOUND,
-        HTTP_STATUS.NOT_FOUND
-      );
-    }
-
-    const consultant = consultants[0];
-
-    // 기간 설정 (기본값: 이번 달)
-    let periodStart, periodEnd;
-    if (start_date && end_date) {
-      periodStart = start_date;
-      periodEnd = end_date;
-    } else {
-      // 이번 달 1일 ~ 말일
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = now.getMonth() + 1;
-      periodStart = `${year}-${String(month).padStart(2, '0')}-01`;
-      const lastDay = new Date(year, month, 0).getDate();
-      periodEnd = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-    }
-
-    // 완료된 상담 통계 조회
-    const [consultationStats] = await pool.execute(
-      `SELECT
-         COUNT(*) as total_consultations,
-         COALESCE(SUM(consultation_duration), 0) as total_consultation_time
-       FROM consultations
-       WHERE consultant_id = ?
-       AND status = '완료'
-       AND DATE(created_at) BETWEEN ? AND ?`,
-      [consultant.consultant_number, periodStart, periodEnd]
-    );
-
-    // 부재 횟수 조회 (consultant_absences 테이블이 있다고 가정)
-    // 만약 테이블이 없다면 0으로 반환
-    let totalAbsences = 0;
-    try {
-      const [absenceStats] = await pool.execute(
-        `SELECT COUNT(*) as total_absences
-         FROM consultant_absences
-         WHERE consultant_id = ?
-         AND DATE(absence_date) BETWEEN ? AND ?`,
-        [consultant.consultant_number, periodStart, periodEnd]
-      );
-      totalAbsences = absenceStats[0]?.total_absences || 0;
-    } catch (error) {
-      // consultant_absences 테이블이 없을 경우 0으로 처리
-      console.log('consultant_absences 테이블 없음, 부재 횟수를 0으로 설정');
-    }
-
-    const stats = consultationStats[0];
-
-    successResponse(res, '상담사 통계 조회 완료', {
-      total_consultations: stats.total_consultations || 0,
-      total_consultation_time: parseInt(stats.total_consultation_time) || 0,
-      total_absences: totalAbsences,
-      period: {
-        start: periodStart,
-        end: periodEnd
-      }
-    });
-
-  } catch (error) {
-    console.error('상담사 통계 조회 에러:', error);
-    errorResponse(
-      res,
-      '상담사 통계 조회 중 오류가 발생했습니다.',
-      RESPONSE_CODES.DATABASE_ERROR,
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    );
-  }
-});
-
-/**
  * PUT /api/consultants/:id/status
  * 상담사 상태 업데이트 (본인 또는 관리자만 가능)
  * - waiting: 대기중 (토글 ON)
@@ -942,6 +848,100 @@ router.put('/:id/status', authenticateToken, validateId, async (req, res) => {
     errorResponse(
       res,
       '상담사 상태 업데이트 중 오류가 발생했습니다.',
+      RESPONSE_CODES.DATABASE_ERROR,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
+  }
+});
+
+/**
+ * GET /api/consultants/:id/statistics
+ * 상담사 통계 조회 (상담 횟수, 총 상담 시간, 부재 횟수)
+ * Query params: start_date, end_date (옵션)
+ */
+router.get('/:id/statistics', authenticateToken, validateId, async (req, res) => {
+  try {
+    const consultantId = req.params.id;
+    const { start_date, end_date } = req.query;
+
+    // 상담사 존재 확인
+    const [consultants] = await pool.execute(
+      'SELECT id, consultant_number FROM consultants WHERE id = ?',
+      [consultantId]
+    );
+
+    if (consultants.length === 0) {
+      return errorResponse(
+        res,
+        '상담사를 찾을 수 없습니다.',
+        RESPONSE_CODES.NOT_FOUND,
+        HTTP_STATUS.NOT_FOUND
+      );
+    }
+
+    const consultant = consultants[0];
+
+    // 기간 설정 (기본값: 이번 달)
+    let periodStart, periodEnd;
+    if (start_date && end_date) {
+      periodStart = start_date;
+      periodEnd = end_date;
+    } else {
+      // 이번 달 1일 ~ 말일
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth() + 1;
+      periodStart = `${year}-${String(month).padStart(2, '0')}-01`;
+      const lastDay = new Date(year, month, 0).getDate();
+      periodEnd = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    }
+
+    // 완료된 상담 통계 조회
+    const [consultationStats] = await pool.execute(
+      `SELECT
+         COUNT(*) as total_consultations,
+         COALESCE(SUM(consultation_duration), 0) as total_consultation_time
+       FROM consultations
+       WHERE consultant_id = ?
+       AND status = '완료'
+       AND DATE(created_at) BETWEEN ? AND ?`,
+      [consultant.consultant_number, periodStart, periodEnd]
+    );
+
+    // 부재 횟수 조회 (consultant_absences 테이블이 있다고 가정)
+    // 만약 테이블이 없다면 0으로 반환
+    let totalAbsences = 0;
+    try {
+      const [absenceStats] = await pool.execute(
+        `SELECT COUNT(*) as total_absences
+         FROM consultant_absences
+         WHERE consultant_id = ?
+         AND DATE(absence_date) BETWEEN ? AND ?`,
+        [consultant.consultant_number, periodStart, periodEnd]
+      );
+      totalAbsences = absenceStats[0]?.total_absences || 0;
+    } catch (error) {
+      // consultant_absences 테이블이 없을 경우 0으로 처리
+      console.log('consultant_absences 테이블 없음, 부재 횟수를 0으로 설정');
+    }
+
+    const stats = consultationStats[0];
+
+    successResponse(res, '상담사 통계 조회 완료', {
+      total_consultations: stats.total_consultations || 0,
+      total_consultation_time: parseInt(stats.total_consultation_time) || 0,
+      total_absences: totalAbsences,
+      period: {
+        start: periodStart,
+        end: periodEnd
+      }
+    });
+
+  } catch (error) {
+    console.error('상담사 통계 조회 에러:', error);
+    errorResponse(
+      res,
+      '상담사 통계 조회 중 오류가 발생했습니다.',
       RESPONSE_CODES.DATABASE_ERROR,
       HTTP_STATUS.INTERNAL_SERVER_ERROR
     );
