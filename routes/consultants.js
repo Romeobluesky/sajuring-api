@@ -755,13 +755,13 @@ router.post('/consultant-events/:id/leave', authenticateToken, validateId, async
 });
 
 /**
- * GET /api/consultants/:consultantId/statistics
+ * GET /api/consultants/:id/statistics
  * 상담사 통계 조회 (상담 횟수, 총 상담 시간, 부재 횟수)
  * Query params: start_date, end_date (옵션)
  */
-router.get('/:consultantId/statistics', authenticateToken, validateId, async (req, res) => {
+router.get('/:id/statistics', authenticateToken, validateId, async (req, res) => {
   try {
-    const { consultantId } = req.params;
+    const consultantId = req.params.id;
     const { start_date, end_date } = req.query;
 
     // 상담사 존재 확인
