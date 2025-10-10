@@ -44,7 +44,7 @@ router.get('/users-event', optionalAuth, validatePagination, async (req, res) =>
     // 일반 이벤트 목록 조회
     const [events] = await pool.execute(
       `SELECT id, event_title, event_context, image_web_src, image_mobile_src,
-       start_date, end_date, event_type, event_state, event_count, event_index, update_At
+       start_date, end_date, event_type, event_state, event_count, event_index, link_url, update_At
        FROM users_event
        WHERE ${whereClause}
        ORDER BY event_index ASC, start_date DESC
@@ -93,7 +93,7 @@ router.get('/users-event/:id', optionalAuth, validateId, async (req, res) => {
     const [events] = await pool.execute(
       `SELECT id, event_title, event_context, image_web_src, image_mobile_src,
        start_date, end_date, event_type, event_state, consultant_list,
-       guest_list, event_count, event_index, update_At
+       guest_list, event_count, event_index, link_url, update_At
        FROM users_event WHERE id = ?`,
       [eventId]
     );
