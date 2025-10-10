@@ -7,6 +7,7 @@ const { testConnection } = require('./config/database');
 // 라우트 import
 const authRoutes = require('./routes/auth');
 const consultantRoutes = require('./routes/consultants');
+const consultantApplicationRoutes = require('./routes/consultant_applications');
 const specialtiesRoutes = require('./routes/specialties');
 const ringRoutes = require('./routes/rings');
 const consultationsRoutes = require('./routes/consultations');
@@ -73,6 +74,7 @@ app.get('/health', (req, res) => {
 
 // API 라우트 설정
 app.use('/api/auth', authRoutes);
+app.use('/api/consultants', consultantApplicationRoutes);
 app.use('/api/consultants', consultantRoutes);
 app.use('/api', specialtiesRoutes);
 app.use('/api/rings', ringRoutes);

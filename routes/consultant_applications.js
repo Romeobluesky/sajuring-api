@@ -1,0 +1,712 @@
+const express = require('express');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const { pool } = require('../config/database');
+const { authenticateToken, optionalAuth } = require('../middleware/auth');
+const { validateId, validatePagination } = require('../middleware/validation');
+const { successResponse, errorResponse, createPagination, safeJsonParse } = require('../utils/helpers');
+const { RESPONSE_CODES, HTTP_STATUS, PAGINATION } = require('../utils/constants');
+const { body, validationResult } = require('express-validator');
+
+const router = express.Router();
+
+// Multer 설정 (첨부 파일 업로드)
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '../uploads/consultant_applications');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'application-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB 제한
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|gif|pdf|doc|docx/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+
+    if (extname && mimetype) {
+      return cb(null, true);
+    } else {
+      cb(new Error('이미지 또는 문서 파일만 업로드 가능합니다 (jpeg, jpg, png, gif, pdf, doc, docx)'));
+    }
+  }
+});
+
+/**
+ * 관리자 권한 체크 미들웨어
+ */
+const requireAdmin = (req, res, next) => {
+  if (req.user.role_level < 10) {
+    return errorResponse(
+      res,
+      '관리자 권한이 필요합니다.',
+      RESPONSE_CODES.FORBIDDEN,
+      HTTP_STATUS.FORBIDDEN
+    );
+  }
+  next();
+};
+
+/**
+ * 상담사 신청 유효성 검사
+ */
+const validateApplication = [
+  body('name')
+    .notEmpty()
+    .withMessage('이름을 입력해주세요.')
+    .isLength({ min: 2, max: 50 })
+    .withMessage('이름은 2-50자 사이여야 합니다.'),
+
+  body('phone')
+    .notEmpty()
+    .withMessage('연락처를 입력해주세요.')
+    .matches(/^[0-9]{10,11}$/)
+    .withMessage('올바른 연락처 형식이 아닙니다.'),
+
+  body('email')
+    .notEmpty()
+    .withMessage('이메일을 입력해주세요.')
+    .isEmail()
+    .withMessage('올바른 이메일 형식이 아닙니다.'),
+
+  body('consultation_field')
+    .notEmpty()
+    .withMessage('상담 분야를 선택해주세요.')
+    .isIn(['타로', '신점'])
+    .withMessage('상담 분야는 타로 또는 신점이어야 합니다.'),
+
+  body('career_years')
+    .optional()
+    .isInt({ min: 0, max: 100 })
+    .withMessage('경력은 0-100년 사이여야 합니다.'),
+
+  body('introduction')
+    .optional()
+    .isLength({ max: 2000 })
+    .withMessage('소개는 2000자 이하여야 합니다.'),
+
+  (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      const errorMessages = errors.array().map(error => error.msg);
+      return errorResponse(
+        res,
+        errorMessages.join(', '),
+        RESPONSE_CODES.VALIDATION_ERROR,
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+    next();
+  }
+];
+
+/**
+ * POST /api/consultants/apply
+ * 상담사 신청
+ */
+router.post('/apply', authenticateToken, validateApplication, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const {
+      name,
+      phone,
+      email,
+      consultation_field,
+      career_years = 0,
+      career_description = '',
+      introduction = '',
+      specialties = [],
+      certifications = []
+    } = req.body;
+
+    // 이미 신청한 내역이 있는지 확인 (대기 중 또는 승인됨)
+    const [existingApplications] = await pool.execute(
+      `SELECT id, status FROM consultant_applications
+       WHERE user_id = ? AND status IN ('pending', 'approved')
+       ORDER BY created_at DESC LIMIT 1`,
+      [userId]
+    );
+
+    if (existingApplications.length > 0) {
+      const status = existingApplications[0].status;
+      if (status === 'approved') {
+        return errorResponse(
+          res,
+          '이미 승인된 신청이 있습니다.',
+          RESPONSE_CODES.VALIDATION_ERROR,
+          HTTP_STATUS.BAD_REQUEST
+        );
+      } else if (status === 'pending') {
+        return errorResponse(
+          res,
+          '이미 대기 중인 신청이 있습니다.',
+          RESPONSE_CODES.VALIDATION_ERROR,
+          HTTP_STATUS.BAD_REQUEST
+        );
+      }
+    }
+
+    // 상담사 신청 등록
+    const [result] = await pool.execute(
+      `INSERT INTO consultant_applications (
+        user_id, name, phone, email, consultation_field,
+        career_years, career_description, introduction,
+        specialties, certifications, status, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW(), NOW())`,
+      [
+        userId,
+        name,
+        phone,
+        email,
+        consultation_field,
+        career_years,
+        career_description,
+        introduction,
+        JSON.stringify(specialties),
+        JSON.stringify(certifications)
+      ]
+    );
+
+    successResponse(res, '상담사 신청이 완료되었습니다. 검토 후 연락드리겠습니다.', {
+      application: {
+        id: result.insertId,
+        status: 'pending',
+        submitted_at: new Date().toISOString()
+      }
+    });
+
+  } catch (error) {
+    console.error('상담사 신청 에러:', error);
+    errorResponse(
+      res,
+      '상담사 신청 중 오류가 발생했습니다.',
+      RESPONSE_CODES.DATABASE_ERROR,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
+  }
+});
+
+/**
+ * GET /api/consultants/applications
+ * 신청 목록 조회 (관리자: 전체, 일반 사용자: 본인)
+ */
+router.get('/applications', authenticateToken, validatePagination, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const isAdmin = req.user.role_level >= 10;
+
+    const {
+      status = null,
+      consultation_field = null,
+      page = PAGINATION.DEFAULT_PAGE,
+      limit = PAGINATION.DEFAULT_LIMIT
+    } = req.query;
+
+    // WHERE 조건 구성
+    let whereConditions = [];
+    let queryParams = [];
+
+    // 관리자가 아니면 본인 신청만 조회
+    if (!isAdmin) {
+      whereConditions.push('user_id = ?');
+      queryParams.push(userId);
+    }
+
+    if (status) {
+      whereConditions.push('status = ?');
+      queryParams.push(status);
+    }
+
+    if (consultation_field) {
+      whereConditions.push('consultation_field = ?');
+      queryParams.push(consultation_field);
+    }
+
+    const whereClause = whereConditions.length > 0
+      ? 'WHERE ' + whereConditions.join(' AND ')
+      : '';
+
+    const limitNum = Math.min(parseInt(limit) || 20, 100);
+    const offset = (page - 1) * limitNum;
+
+    // 신청 목록 조회 (사용자 정보 포함)
+    const [applications] = await pool.execute(
+      `SELECT
+        a.id, a.user_id, a.name, a.phone, a.email,
+        a.consultation_field, a.career_years, a.career_description,
+        a.introduction, a.specialties, a.certifications,
+        a.status, a.rejection_reason, a.admin_notes,
+        a.reviewed_by, a.reviewed_at, a.created_at, a.updated_at,
+        u.username, u.login_id
+       FROM consultant_applications a
+       LEFT JOIN users u ON a.user_id = u.id
+       ${whereClause}
+       ORDER BY
+         CASE a.status
+           WHEN 'pending' THEN 1
+           WHEN 'under_review' THEN 2
+           WHEN 'approved' THEN 3
+           WHEN 'rejected' THEN 4
+         END,
+         a.created_at DESC
+       LIMIT ${limitNum} OFFSET ${offset}`,
+      queryParams
+    );
+
+    // JSON 필드 파싱
+    applications.forEach(app => {
+      app.specialties = safeJsonParse(app.specialties, []);
+      app.certifications = safeJsonParse(app.certifications, []);
+    });
+
+    // 전체 개수 조회
+    const [countResult] = await pool.execute(
+      `SELECT COUNT(*) as total FROM consultant_applications a ${whereClause}`,
+      queryParams
+    );
+    const total = countResult[0].total;
+
+    const pagination = createPagination(page, limitNum, total);
+
+    successResponse(res, '신청 목록 조회 완료', {
+      applications,
+      count: applications.length,
+      filters: {
+        status,
+        consultation_field,
+        limit: limitNum
+      }
+    }, pagination);
+
+  } catch (error) {
+    console.error('신청 목록 조회 에러:', error);
+    errorResponse(
+      res,
+      '신청 목록 조회 중 오류가 발생했습니다.',
+      RESPONSE_CODES.DATABASE_ERROR,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
+  }
+});
+
+/**
+ * GET /api/consultants/applications/:id
+ * 신청 상세 조회
+ */
+router.get('/applications/:id', authenticateToken, validateId, async (req, res) => {
+  try {
+    const applicationId = req.params.id;
+    const userId = req.user.id;
+    const isAdmin = req.user.role_level >= 10;
+
+    const [applications] = await pool.execute(
+      `SELECT
+        a.*,
+        u.username, u.login_id, u.email as user_email,
+        reviewer.username as reviewer_name
+       FROM consultant_applications a
+       LEFT JOIN users u ON a.user_id = u.id
+       LEFT JOIN users reviewer ON a.reviewed_by = reviewer.id
+       WHERE a.id = ?`,
+      [applicationId]
+    );
+
+    if (applications.length === 0) {
+      return errorResponse(
+        res,
+        '신청 내역을 찾을 수 없습니다.',
+        RESPONSE_CODES.NOT_FOUND,
+        HTTP_STATUS.NOT_FOUND
+      );
+    }
+
+    const application = applications[0];
+
+    // 권한 확인 (본인 또는 관리자)
+    if (!isAdmin && application.user_id !== userId) {
+      return errorResponse(
+        res,
+        '권한이 없습니다.',
+        RESPONSE_CODES.FORBIDDEN,
+        HTTP_STATUS.FORBIDDEN
+      );
+    }
+
+    // JSON 필드 파싱
+    application.specialties = safeJsonParse(application.specialties, []);
+    application.certifications = safeJsonParse(application.certifications, []);
+
+    successResponse(res, '신청 상세 조회 완료', {
+      application
+    });
+
+  } catch (error) {
+    console.error('신청 상세 조회 에러:', error);
+    errorResponse(
+      res,
+      '신청 상세 조회 중 오류가 발생했습니다.',
+      RESPONSE_CODES.DATABASE_ERROR,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
+  }
+});
+
+/**
+ * PUT /api/consultants/applications/:id
+ * 신청 정보 수정 (승인 전만 가능)
+ */
+router.put('/applications/:id', authenticateToken, validateId, validateApplication, async (req, res) => {
+  try {
+    const applicationId = req.params.id;
+    const userId = req.user.id;
+
+    const {
+      name,
+      phone,
+      email,
+      consultation_field,
+      career_years = 0,
+      career_description = '',
+      introduction = '',
+      specialties = [],
+      certifications = []
+    } = req.body;
+
+    // 신청 정보 확인
+    const [applications] = await pool.execute(
+      'SELECT id, user_id, status FROM consultant_applications WHERE id = ?',
+      [applicationId]
+    );
+
+    if (applications.length === 0) {
+      return errorResponse(
+        res,
+        '신청 내역을 찾을 수 없습니다.',
+        RESPONSE_CODES.NOT_FOUND,
+        HTTP_STATUS.NOT_FOUND
+      );
+    }
+
+    const application = applications[0];
+
+    // 권한 확인 (본인만)
+    if (application.user_id !== userId) {
+      return errorResponse(
+        res,
+        '본인의 신청만 수정할 수 있습니다.',
+        RESPONSE_CODES.FORBIDDEN,
+        HTTP_STATUS.FORBIDDEN
+      );
+    }
+
+    // 상태 확인 (승인되지 않은 경우만 수정 가능)
+    if (application.status === 'approved') {
+      return errorResponse(
+        res,
+        '이미 승인된 신청은 수정할 수 없습니다.',
+        RESPONSE_CODES.VALIDATION_ERROR,
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+
+    // 신청 정보 수정
+    await pool.execute(
+      `UPDATE consultant_applications
+       SET name = ?, phone = ?, email = ?, consultation_field = ?,
+           career_years = ?, career_description = ?, introduction = ?,
+           specialties = ?, certifications = ?, updated_at = NOW()
+       WHERE id = ?`,
+      [
+        name,
+        phone,
+        email,
+        consultation_field,
+        career_years,
+        career_description,
+        introduction,
+        JSON.stringify(specialties),
+        JSON.stringify(certifications),
+        applicationId
+      ]
+    );
+
+    successResponse(res, '신청 정보가 수정되었습니다.', {
+      application_id: applicationId
+    });
+
+  } catch (error) {
+    console.error('신청 정보 수정 에러:', error);
+    errorResponse(
+      res,
+      '신청 정보 수정 중 오류가 발생했습니다.',
+      RESPONSE_CODES.DATABASE_ERROR,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
+  }
+});
+
+/**
+ * PUT /api/consultants/applications/:id/status
+ * 신청 상태 변경 (관리자 전용)
+ */
+router.put('/applications/:id/status', authenticateToken, requireAdmin, validateId, async (req, res) => {
+  try {
+    const applicationId = req.params.id;
+    const adminId = req.user.id;
+    const { status, rejection_reason = '', admin_notes = '' } = req.body;
+
+    // 상태 검증
+    const validStatuses = ['pending', 'under_review', 'approved', 'rejected'];
+    if (!status || !validStatuses.includes(status)) {
+      return errorResponse(
+        res,
+        `상태는 ${validStatuses.join(', ')} 중 하나여야 합니다.`,
+        RESPONSE_CODES.VALIDATION_ERROR,
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+
+    // rejection_reason 검증 (거절 시 필수)
+    if (status === 'rejected' && !rejection_reason) {
+      return errorResponse(
+        res,
+        '거절 사유를 입력해주세요.',
+        RESPONSE_CODES.VALIDATION_ERROR,
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+
+    // 신청 정보 확인
+    const [applications] = await pool.execute(
+      'SELECT id, user_id, status, name, email FROM consultant_applications WHERE id = ?',
+      [applicationId]
+    );
+
+    if (applications.length === 0) {
+      return errorResponse(
+        res,
+        '신청 내역을 찾을 수 없습니다.',
+        RESPONSE_CODES.NOT_FOUND,
+        HTTP_STATUS.NOT_FOUND
+      );
+    }
+
+    const application = applications[0];
+
+    // 상태 변경
+    await pool.execute(
+      `UPDATE consultant_applications
+       SET status = ?, rejection_reason = ?, admin_notes = ?,
+           reviewed_by = ?, reviewed_at = NOW(), updated_at = NOW()
+       WHERE id = ?`,
+      [status, rejection_reason, admin_notes, adminId, applicationId]
+    );
+
+    // 승인 시 consultants 테이블에 추가
+    if (status === 'approved') {
+      // 사용자 정보 조회
+      const [users] = await pool.execute(
+        'SELECT login_id FROM users WHERE id = ?',
+        [application.user_id]
+      );
+
+      if (users.length > 0) {
+        // consultant_number 생성 (최대값 + 1)
+        const [maxConsultantNumber] = await pool.execute(
+          'SELECT MAX(CAST(consultant_number AS UNSIGNED)) as max_num FROM consultants'
+        );
+        const nextNumber = (maxConsultantNumber[0].max_num || 0) + 1;
+        const consultantNumber = String(nextNumber).padStart(3, '0');
+
+        // consultants 테이블에 추가
+        await pool.execute(
+          `INSERT INTO consultants (
+            user_id, consultant_number, name, phone, email,
+            consultation_field, career, introduction, status,
+            created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', NOW(), NOW())`,
+          [
+            users[0].login_id,
+            consultantNumber,
+            application.name,
+            application.phone || '',
+            application.email || '',
+            application.consultation_field || '타로',
+            application.career_description || '',
+            application.introduction || ''
+          ]
+        );
+      }
+    }
+
+    successResponse(res, `신청이 ${status === 'approved' ? '승인' : status === 'rejected' ? '거절' : '처리'}되었습니다.`, {
+      application_id: applicationId,
+      status,
+      reviewed_at: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('신청 상태 변경 에러:', error);
+    errorResponse(
+      res,
+      '신청 상태 변경 중 오류가 발생했습니다.',
+      RESPONSE_CODES.DATABASE_ERROR,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
+  }
+});
+
+/**
+ * DELETE /api/consultants/applications/:id
+ * 신청 취소/삭제
+ */
+router.delete('/applications/:id', authenticateToken, validateId, async (req, res) => {
+  try {
+    const applicationId = req.params.id;
+    const userId = req.user.id;
+    const isAdmin = req.user.role_level >= 10;
+
+    // 신청 정보 확인
+    const [applications] = await pool.execute(
+      'SELECT id, user_id, status FROM consultant_applications WHERE id = ?',
+      [applicationId]
+    );
+
+    if (applications.length === 0) {
+      return errorResponse(
+        res,
+        '신청 내역을 찾을 수 없습니다.',
+        RESPONSE_CODES.NOT_FOUND,
+        HTTP_STATUS.NOT_FOUND
+      );
+    }
+
+    const application = applications[0];
+
+    // 권한 확인 (본인 또는 관리자)
+    if (!isAdmin && application.user_id !== userId) {
+      return errorResponse(
+        res,
+        '권한이 없습니다.',
+        RESPONSE_CODES.FORBIDDEN,
+        HTTP_STATUS.FORBIDDEN
+      );
+    }
+
+    // 승인된 신청은 삭제 불가
+    if (application.status === 'approved') {
+      return errorResponse(
+        res,
+        '이미 승인된 신청은 삭제할 수 없습니다.',
+        RESPONSE_CODES.VALIDATION_ERROR,
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+
+    // 신청 삭제
+    await pool.execute(
+      'DELETE FROM consultant_applications WHERE id = ?',
+      [applicationId]
+    );
+
+    successResponse(res, '신청이 취소/삭제되었습니다.', {
+      deleted_application_id: applicationId
+    });
+
+  } catch (error) {
+    console.error('신청 취소/삭제 에러:', error);
+    errorResponse(
+      res,
+      '신청 취소/삭제 중 오류가 발생했습니다.',
+      RESPONSE_CODES.DATABASE_ERROR,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
+  }
+});
+
+/**
+ * POST /api/consultants/applications/:id/upload
+ * 첨부 파일 업로드
+ */
+router.post('/applications/:id/upload', authenticateToken, validateId, upload.single('file'), async (req, res) => {
+  try {
+    const applicationId = req.params.id;
+    const userId = req.user.id;
+
+    if (!req.file) {
+      return errorResponse(
+        res,
+        '파일을 업로드해주세요.',
+        RESPONSE_CODES.VALIDATION_ERROR,
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+
+    // 신청 정보 확인
+    const [applications] = await pool.execute(
+      'SELECT id, user_id, status FROM consultant_applications WHERE id = ?',
+      [applicationId]
+    );
+
+    if (applications.length === 0) {
+      // 업로드된 파일 삭제
+      fs.unlinkSync(req.file.path);
+      return errorResponse(
+        res,
+        '신청 내역을 찾을 수 없습니다.',
+        RESPONSE_CODES.NOT_FOUND,
+        HTTP_STATUS.NOT_FOUND
+      );
+    }
+
+    const application = applications[0];
+
+    // 권한 확인
+    if (application.user_id !== userId) {
+      fs.unlinkSync(req.file.path);
+      return errorResponse(
+        res,
+        '권한이 없습니다.',
+        RESPONSE_CODES.FORBIDDEN,
+        HTTP_STATUS.FORBIDDEN
+      );
+    }
+
+    const fileUrl = `/uploads/consultant_applications/${req.file.filename}`;
+
+    successResponse(res, '파일 업로드 완료', {
+      url: fileUrl,
+      filename: req.file.filename,
+      originalname: req.file.originalname,
+      size: req.file.size
+    });
+
+  } catch (error) {
+    console.error('파일 업로드 에러:', error);
+    if (req.file && req.file.path) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (unlinkError) {
+        console.error('파일 삭제 실패:', unlinkError);
+      }
+    }
+    errorResponse(
+      res,
+      '파일 업로드 중 오류가 발생했습니다.',
+      RESPONSE_CODES.SERVER_ERROR,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
+  }
+});
+
+module.exports = router;
