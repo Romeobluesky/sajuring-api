@@ -350,12 +350,10 @@ router.get('/statistics', async (req, res) => {
 
 /**
  * GET /api/consultant-applications
- * 신청 목록 조회 (관리자: 전체, 일반 사용자: 본인)
+ * 신청 목록 조회 (인증 불필요 - 공개 API)
  */
-router.get('/', authenticateToken, validatePagination, async (req, res) => {
+router.get('/', validatePagination, async (req, res) => {
   try {
-    const userId = req.user.id;
-    const isAdmin = req.user.role_level >= 10;
 
     const {
       status = null,
@@ -367,12 +365,6 @@ router.get('/', authenticateToken, validatePagination, async (req, res) => {
     // WHERE 조건 구성
     let whereConditions = [];
     let queryParams = [];
-
-    // 관리자가 아니면 본인 신청만 조회
-    if (!isAdmin) {
-      whereConditions.push('user_id = ?');
-      queryParams.push(userId);
-    }
 
     if (status) {
       whereConditions.push('status = ?');
@@ -391,39 +383,31 @@ router.get('/', authenticateToken, validatePagination, async (req, res) => {
     const limitNum = Math.min(parseInt(limit) || 20, 100);
     const offset = (page - 1) * limitNum;
 
-    // 신청 목록 조회 (사용자 정보 포함)
+    // 신청 목록 조회
     const [applications] = await pool.execute(
       `SELECT
-        a.id, a.user_id, a.name, a.phone, a.email,
-        a.consultation_field, a.career_years, a.career_description,
-        a.introduction, a.specialties, a.certifications,
-        a.status, a.rejection_reason, a.admin_notes,
-        a.reviewed_by, a.reviewed_at, a.created_at, a.updated_at,
-        u.username, u.login_id
-       FROM consultant_applications a
-       LEFT JOIN users u ON a.user_id = u.id
+        id, title, applicant_name, stage_name,
+        consultation_field, region, profile_image_path,
+        introduction, phone, email, content, portfolio_url,
+        status, admin_note, processed_by, processed_at,
+        created_at, updated_at
+       FROM consultant_applications
        ${whereClause}
        ORDER BY
-         CASE a.status
+         CASE status
            WHEN 'pending' THEN 1
-           WHEN 'under_review' THEN 2
+           WHEN 'reviewing' THEN 2
            WHEN 'approved' THEN 3
            WHEN 'rejected' THEN 4
          END,
-         a.created_at DESC
+         created_at DESC
        LIMIT ${limitNum} OFFSET ${offset}`,
       queryParams
     );
 
-    // JSON 필드 파싱
-    applications.forEach(app => {
-      app.specialties = safeJsonParse(app.specialties, []);
-      app.certifications = safeJsonParse(app.certifications, []);
-    });
-
     // 전체 개수 조회
     const [countResult] = await pool.execute(
-      `SELECT COUNT(*) as total FROM consultant_applications a ${whereClause}`,
+      `SELECT COUNT(*) as total FROM consultant_applications ${whereClause}`,
       queryParams
     );
     const total = countResult[0].total;
