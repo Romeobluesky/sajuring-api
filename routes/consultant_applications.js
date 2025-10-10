@@ -267,10 +267,10 @@ router.get('/statistics', async (req, res) => {
     // 평균 처리 시간 (승인/거절된 신청 기준)
     const [avgProcessingTime] = await pool.execute(
       `SELECT
-        AVG(TIMESTAMPDIFF(DAY, created_at, reviewed_at)) as avg_days
+        AVG(TIMESTAMPDIFF(DAY, created_at, processed_at)) as avg_days
        FROM consultant_applications
        WHERE status IN ('approved', 'rejected')
-         AND reviewed_at IS NOT NULL
+         AND processed_at IS NOT NULL
          ${periodCondition}`,
       periodParams
     );
@@ -844,10 +844,10 @@ router.get('/statistics', async (req, res) => {
     // 평균 처리 시간 (승인/거절된 신청 기준)
     const [avgProcessingTime] = await pool.execute(
       `SELECT
-        AVG(TIMESTAMPDIFF(DAY, created_at, reviewed_at)) as avg_days
+        AVG(TIMESTAMPDIFF(DAY, created_at, processed_at)) as avg_days
        FROM consultant_applications
        WHERE status IN ('approved', 'rejected')
-         AND reviewed_at IS NOT NULL
+         AND processed_at IS NOT NULL
          ${periodCondition}`,
       periodParams
     );
