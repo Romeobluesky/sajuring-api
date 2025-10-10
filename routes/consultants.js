@@ -1022,8 +1022,8 @@ router.get('/:id/statistics/by-fee', authenticateToken, validateId, async (req, 
       );
     }
 
-    // 전화상담 고객이용료별 통계 조회
-    const [phoneStats] = await pool.execute(
+    // 고객이용료별 통계 조회 (모든 상담 방법 포함)
+    const [feeStats] = await pool.execute(
       `SELECT
          fee_rate_at_time as consultation_fee,
          SUM(TIME_TO_SEC(duration_time)) as total_time_seconds,
@@ -1031,28 +1031,34 @@ router.get('/:id/statistics/by-fee', authenticateToken, validateId, async (req, 
        FROM consultations
        WHERE consultant_id = ?
          AND DATE_FORMAT(consultation_date, '%Y-%m') = ?
-         AND consultation_method = '전화상담'
          AND status = '완료'
        GROUP BY fee_rate_at_time
        ORDER BY fee_rate_at_time ASC`,
       [consultant.consultant_number, month]
     );
 
-    // 전화상담 전체 합계 계산
-    const phoneTotalTime = phoneStats.reduce((sum, stat) => sum + parseInt(stat.total_time_seconds || 0), 0);
-    const phoneTotalCount = phoneStats.reduce((sum, stat) => sum + parseInt(stat.consultation_count || 0), 0);
+    // 디버깅 로그
+    console.log('=== 고객이용료별 통계 조회 ===');
+    console.log('consultant_number:', consultant.consultant_number);
+    console.log('month:', month);
+    console.log('결과 개수:', feeStats.length);
+    console.log('결과 데이터:', feeStats);
+
+    // 전체 합계 계산
+    const totalTime = feeStats.reduce((sum, stat) => sum + parseInt(stat.total_time_seconds || 0), 0);
+    const totalCount = feeStats.reduce((sum, stat) => sum + parseInt(stat.consultation_count || 0), 0);
 
     successResponse(res, '상담사 고객이용료별 통계 조회 완료', {
       year_month: month,
       consultant_id: parseInt(consultantId),
       phone_consultation: {
-        fee_breakdown: phoneStats.map(stat => ({
+        fee_breakdown: feeStats.map(stat => ({
           consultation_fee: parseInt(stat.consultation_fee),
           total_time_seconds: parseInt(stat.total_time_seconds || 0),
           consultation_count: parseInt(stat.consultation_count || 0)
         })),
-        total_time_seconds: phoneTotalTime,
-        total_count: phoneTotalCount
+        total_time_seconds: totalTime,
+        total_count: totalCount
       }
     });
 
