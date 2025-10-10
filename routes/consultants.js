@@ -897,14 +897,17 @@ router.get('/:id/statistics', authenticateToken, validateId, async (req, res) =>
     }
 
     // 완료된 상담 통계 조회
+    // duration_time은 HH:mm:ss 형식이므로 초 단위로 변환
     const [consultationStats] = await pool.execute(
       `SELECT
          COUNT(*) as total_consultations,
-         COALESCE(SUM(duration_time), 0) as total_consultation_time
+         COALESCE(SUM(
+           TIME_TO_SEC(duration_time)
+         ), 0) as total_consultation_time
        FROM consultations
        WHERE consultant_id = ?
        AND status = '완료'
-       AND DATE(created_at) BETWEEN ? AND ?`,
+       AND DATE(consultation_date) BETWEEN ? AND ?`,
       [consultant.consultant_number, periodStart, periodEnd]
     );
 
