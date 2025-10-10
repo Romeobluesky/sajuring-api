@@ -197,6 +197,146 @@ router.post('/apply', authenticateToken, validateApplication, async (req, res) =
 });
 
 /**
+ * GET /api/consultant-applications/statistics
+ * 상담사 신청 통계 조회 (인증 불필요)
+ * 주의: /:id보다 먼저 정의해야 함!
+ */
+router.get('/statistics', async (req, res) => {
+  try {
+    const { start_date = null, end_date = null } = req.query;
+
+    // 기간 설정
+    let periodCondition = '';
+    let periodParams = [];
+
+    if (start_date && end_date) {
+      periodCondition = 'AND created_at BETWEEN ? AND ?';
+      periodParams = [start_date, end_date];
+    } else {
+      // 기본값: 최근 30일
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      periodCondition = 'AND created_at >= ?';
+      periodParams = [thirtyDaysAgo.toISOString().split('T')[0]];
+    }
+
+    // 전체 통계
+    const [totalStats] = await pool.execute(
+      `SELECT
+        COUNT(*) as total_applications,
+        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_count,
+        SUM(CASE WHEN status = 'under_review' THEN 1 ELSE 0 END) as under_review_count,
+        SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved_count,
+        SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected_count
+       FROM consultant_applications
+       WHERE 1=1 ${periodCondition}`,
+      periodParams
+    );
+
+    // 상담 분야별 통계
+    const [fieldStats] = await pool.execute(
+      `SELECT
+        consultation_field,
+        COUNT(*) as count,
+        SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved_count
+       FROM consultant_applications
+       WHERE 1=1 ${periodCondition}
+       GROUP BY consultation_field`,
+      periodParams
+    );
+
+    // 월별 신청 추이 (최근 6개월)
+    const [monthlyStats] = await pool.execute(
+      `SELECT
+        DATE_FORMAT(created_at, '%Y-%m') as month,
+        COUNT(*) as total_count,
+        SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved_count,
+        SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected_count
+       FROM consultant_applications
+       WHERE created_at >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
+       GROUP BY DATE_FORMAT(created_at, '%Y-%m')
+       ORDER BY month DESC`,
+      []
+    );
+
+    // 승인율 계산
+    const total = parseInt(totalStats[0].total_applications) || 0;
+    const approved = parseInt(totalStats[0].approved_count) || 0;
+    const approvalRate = total > 0 ? ((approved / total) * 100).toFixed(2) : 0;
+
+    // 평균 처리 시간 (승인/거절된 신청 기준)
+    const [avgProcessingTime] = await pool.execute(
+      `SELECT
+        AVG(TIMESTAMPDIFF(DAY, created_at, reviewed_at)) as avg_days
+       FROM consultant_applications
+       WHERE status IN ('approved', 'rejected')
+         AND reviewed_at IS NOT NULL
+         ${periodCondition}`,
+      periodParams
+    );
+
+    // 최근 신청 현황 (최근 7일)
+    const [recentStats] = await pool.execute(
+      `SELECT
+        DATE(created_at) as date,
+        COUNT(*) as count
+       FROM consultant_applications
+       WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+       GROUP BY DATE(created_at)
+       ORDER BY date DESC`,
+      []
+    );
+
+    successResponse(res, '상담사 신청 통계 조회 완료', {
+      period: {
+        start: start_date || periodParams[0],
+        end: end_date || new Date().toISOString().split('T')[0]
+      },
+      total_statistics: {
+        total_applications: parseInt(totalStats[0].total_applications) || 0,
+        pending: parseInt(totalStats[0].pending_count) || 0,
+        under_review: parseInt(totalStats[0].under_review_count) || 0,
+        approved: parseInt(totalStats[0].approved_count) || 0,
+        rejected: parseInt(totalStats[0].rejected_count) || 0,
+        approval_rate: parseFloat(approvalRate)
+      },
+      field_statistics: fieldStats.map(field => ({
+        consultation_field: field.consultation_field,
+        total_count: parseInt(field.count) || 0,
+        approved_count: parseInt(field.approved_count) || 0,
+        approval_rate: field.count > 0
+          ? parseFloat(((field.approved_count / field.count) * 100).toFixed(2))
+          : 0
+      })),
+      monthly_trend: monthlyStats.map(month => ({
+        month: month.month,
+        total_count: parseInt(month.total_count) || 0,
+        approved_count: parseInt(month.approved_count) || 0,
+        rejected_count: parseInt(month.rejected_count) || 0
+      })),
+      processing_time: {
+        average_days: avgProcessingTime[0].avg_days
+          ? parseFloat(avgProcessingTime[0].avg_days).toFixed(1)
+          : null
+      },
+      recent_applications: recentStats.map(stat => ({
+        date: stat.date,
+        count: parseInt(stat.count) || 0
+      }))
+    });
+
+  } catch (error) {
+    console.error('신청 통계 조회 에러:', error);
+    errorResponse(
+      res,
+      '신청 통계 조회 중 오류가 발생했습니다.',
+      RESPONSE_CODES.DATABASE_ERROR,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
+  }
+});
+
+/**
  * GET /api/consultant-applications
  * 신청 목록 조회 (관리자: 전체, 일반 사용자: 본인)
  */
