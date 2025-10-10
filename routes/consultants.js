@@ -992,9 +992,9 @@ router.get('/:id/statistics/by-fee', authenticateToken, validateId, async (req, 
       );
     }
 
-    // 상담사 존재 확인
+    // 상담사 존재 확인 및 user_id 조회
     const [consultants] = await pool.execute(
-      'SELECT id, consultant_number FROM consultants WHERE id = ?',
+      'SELECT id, consultant_number, user_id FROM consultants WHERE id = ?',
       [consultantId]
     );
 
@@ -1010,8 +1010,7 @@ router.get('/:id/statistics/by-fee', authenticateToken, validateId, async (req, 
     const consultant = consultants[0];
 
     // 권한 확인: 본인 또는 관리자만 조회 가능
-    const isOwner = req.user.login_id === consultant.consultant_number ||
-                    req.user.id === consultants[0].user_id;
+    const isOwner = req.user.login_id === consultant.user_id;
     const isAdmin = req.user.role_level === 10;
 
     if (!isOwner && !isAdmin) {
@@ -1078,9 +1077,9 @@ router.get('/:id/statistics', authenticateToken, validateId, async (req, res) =>
     const consultantId = req.params.id;
     const { start_date, end_date } = req.query;
 
-    // 상담사 존재 확인
+    // 상담사 존재 확인 및 user_id 조회
     const [consultants] = await pool.execute(
-      'SELECT id, consultant_number FROM consultants WHERE id = ?',
+      'SELECT id, consultant_number, user_id FROM consultants WHERE id = ?',
       [consultantId]
     );
 
@@ -1094,6 +1093,19 @@ router.get('/:id/statistics', authenticateToken, validateId, async (req, res) =>
     }
 
     const consultant = consultants[0];
+
+    // 권한 확인: 본인 또는 관리자만 조회 가능
+    const isOwner = req.user.login_id === consultant.user_id;
+    const isAdmin = req.user.role_level === 10;
+
+    if (!isOwner && !isAdmin) {
+      return errorResponse(
+        res,
+        '권한이 없습니다.',
+        RESPONSE_CODES.FORBIDDEN,
+        HTTP_STATUS.FORBIDDEN
+      );
+    }
 
     // 기간 설정 (기본값: 이번 달)
     let periodStart, periodEnd;
