@@ -112,68 +112,55 @@ const validateApplication = [
 
 /**
  * POST /api/consultant-applications/apply
- * 상담사 신청
+ * 상담사 신청 (multipart/form-data)
  */
-router.post('/apply', authenticateToken, validateApplication, async (req, res) => {
+router.post('/apply', authenticateToken, upload.single('profile_image'), async (req, res) => {
   try {
-    const userId = req.user.id;
     const {
-      name,
+      title,
+      applicant_name,
+      stage_name,
+      consultation_field,
+      region,
+      introduction,
       phone,
       email,
-      consultation_field,
-      career_years = 0,
-      career_description = '',
-      introduction = '',
-      specialties = [],
-      certifications = []
+      content,
+      portfolio_url
     } = req.body;
 
-    // 이미 신청한 내역이 있는지 확인 (대기 중 또는 승인됨)
-    const [existingApplications] = await pool.execute(
-      `SELECT id, status FROM consultant_applications
-       WHERE user_id = ? AND status IN ('pending', 'approved')
-       ORDER BY created_at DESC LIMIT 1`,
-      [userId]
-    );
-
-    if (existingApplications.length > 0) {
-      const status = existingApplications[0].status;
-      if (status === 'approved') {
-        return errorResponse(
-          res,
-          '이미 승인된 신청이 있습니다.',
-          RESPONSE_CODES.VALIDATION_ERROR,
-          HTTP_STATUS.BAD_REQUEST
-        );
-      } else if (status === 'pending') {
-        return errorResponse(
-          res,
-          '이미 대기 중인 신청이 있습니다.',
-          RESPONSE_CODES.VALIDATION_ERROR,
-          HTTP_STATUS.BAD_REQUEST
-        );
-      }
+    // 필수 필드 검증
+    if (!title || !applicant_name || !consultation_field || !phone || !email) {
+      return errorResponse(
+        res,
+        '필수 항목을 모두 입력해주세요. (제목, 이름, 상담분야, 연락처, 이메일)',
+        RESPONSE_CODES.VALIDATION_ERROR,
+        HTTP_STATUS.BAD_REQUEST
+      );
     }
+
+    // 프로필 이미지 처리 (multer로 업로드된 파일)
+    const profile_image_path = req.file ? req.file.path : null;
 
     // 상담사 신청 등록
     const [result] = await pool.execute(
       `INSERT INTO consultant_applications (
-        user_id, name, phone, email, consultation_field,
-        career_years, career_description, introduction,
-        specialties, certifications, status, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW(), NOW())`,
+        title, applicant_name, stage_name, consultation_field,
+        region, profile_image_path, introduction, phone, email,
+        content, portfolio_url, status, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW(), NOW())`,
       [
-        userId,
-        name,
+        title,
+        applicant_name,
+        stage_name || null,
+        consultation_field,
+        region || null,
+        profile_image_path || null,
+        introduction || null,
         phone,
         email,
-        consultation_field,
-        career_years,
-        career_description,
-        introduction,
-        JSON.stringify(specialties),
-        JSON.stringify(certifications)
+        content || null,
+        portfolio_url || null
       ]
     );
 
