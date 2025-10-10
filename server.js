@@ -74,8 +74,8 @@ app.get('/health', (req, res) => {
 
 // API 라우트 설정
 app.use('/api/auth', authRoutes);
-app.use('/api/consultants', consultantApplicationRoutes);
-app.use('/api/consultants', consultantRoutes);
+app.use('/api/consultants', consultantApplicationRoutes); // 더 구체적인 경로가 먼저
+app.use('/api/consultants', consultantRoutes);           // 일반 경로는 나중에
 app.use('/api', specialtiesRoutes);
 app.use('/api/rings', ringRoutes);
 app.use('/api/consultations', consultationsRoutes);
