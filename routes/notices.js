@@ -112,7 +112,7 @@ router.get('/', optionalAuth, validatePagination, async (req, res) => {
 
     // 공지사항 목록 조회 (고정 공지 우선, 중요 공지 다음, 생성일 최신순)
     const [notices] = await pool.execute(
-      `SELECT id, title, type, category, status, is_important, is_pinned,
+      `SELECT id, title, content, type, category, status, is_important, is_pinned,
        views, author, created_at, updated_at
        FROM notices
        WHERE ${whereClause}
