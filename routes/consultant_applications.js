@@ -206,43 +206,55 @@ router.get('/statistics', async (req, res) => {
     const { start_date = null, end_date = null } = req.query;
 
     // 기간 설정
-    let periodCondition = '';
-    let periodParams = [];
+    let periodStart, periodEnd;
 
     if (start_date && end_date) {
-      periodCondition = 'AND created_at BETWEEN ? AND ?';
-      periodParams = [start_date, end_date];
+      periodStart = start_date;
+      periodEnd = end_date;
     } else {
-      // 기본값: 최근 30일
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      periodCondition = 'AND created_at >= ?';
-      periodParams = [thirtyDaysAgo.toISOString().split('T')[0]];
+      // 기본값: 현재 달 1일부터 말일까지
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth() + 1;
+      periodStart = `${year}-${String(month).padStart(2, '0')}-01`;
+
+      // 말일 계산
+      const lastDay = new Date(year, month, 0).getDate();
+      periodEnd = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
     }
 
-    // 전체 통계
-    const [totalStats] = await pool.execute(
+    // 신청수 통계 (created_at 기준 - 이번 달에 신청한 건수)
+    const [applicationStats] = await pool.execute(
       `SELECT
         COUNT(*) as total_applications,
         SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_count,
-        SUM(CASE WHEN status = 'under_review' THEN 1 ELSE 0 END) as under_review_count,
+        SUM(CASE WHEN status = 'reviewing' THEN 1 ELSE 0 END) as under_review_count
+       FROM consultant_applications
+       WHERE DATE(created_at) BETWEEN ? AND ?`,
+      [periodStart, periodEnd]
+    );
+
+    // 승인/거절 통계 (processed_at 기준 - 이번 달에 승인/거절된 건수)
+    const [processedStats] = await pool.execute(
+      `SELECT
         SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved_count,
         SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected_count
        FROM consultant_applications
-       WHERE 1=1 ${periodCondition}`,
-      periodParams
+       WHERE DATE(processed_at) BETWEEN ? AND ?
+         AND processed_at IS NOT NULL`,
+      [periodStart, periodEnd]
     );
 
-    // 상담 분야별 통계
+    // 상담 분야별 통계 (created_at 기준)
     const [fieldStats] = await pool.execute(
       `SELECT
         consultation_field,
         COUNT(*) as count,
         SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved_count
        FROM consultant_applications
-       WHERE 1=1 ${periodCondition}
+       WHERE DATE(created_at) BETWEEN ? AND ?
        GROUP BY consultation_field`,
-      periodParams
+      [periodStart, periodEnd]
     );
 
     // 월별 신청 추이 (최근 6개월)
@@ -259,20 +271,20 @@ router.get('/statistics', async (req, res) => {
       []
     );
 
-    // 승인율 계산
-    const total = parseInt(totalStats[0].total_applications) || 0;
-    const approved = parseInt(totalStats[0].approved_count) || 0;
+    // 승인율 계산 (신청 건수 대비 승인 건수)
+    const total = parseInt(applicationStats[0].total_applications) || 0;
+    const approved = parseInt(processedStats[0].approved_count) || 0;
     const approvalRate = total > 0 ? ((approved / total) * 100).toFixed(2) : 0;
 
-    // 평균 처리 시간 (승인/거절된 신청 기준)
+    // 평균 처리 시간 (이번 달에 처리된 신청 기준)
     const [avgProcessingTime] = await pool.execute(
       `SELECT
         AVG(TIMESTAMPDIFF(DAY, created_at, processed_at)) as avg_days
        FROM consultant_applications
        WHERE status IN ('approved', 'rejected')
          AND processed_at IS NOT NULL
-         ${periodCondition}`,
-      periodParams
+         AND DATE(processed_at) BETWEEN ? AND ?`,
+      [periodStart, periodEnd]
     );
 
     // 최근 신청 현황 (최근 7일)
@@ -289,15 +301,15 @@ router.get('/statistics', async (req, res) => {
 
     successResponse(res, '상담사 신청 통계 조회 완료', {
       period: {
-        start: start_date || periodParams[0],
-        end: end_date || new Date().toISOString().split('T')[0]
+        start: periodStart,
+        end: periodEnd
       },
       total_statistics: {
-        total_applications: parseInt(totalStats[0].total_applications) || 0,
-        pending: parseInt(totalStats[0].pending_count) || 0,
-        under_review: parseInt(totalStats[0].under_review_count) || 0,
-        approved: parseInt(totalStats[0].approved_count) || 0,
-        rejected: parseInt(totalStats[0].rejected_count) || 0,
+        total_applications: parseInt(applicationStats[0].total_applications) || 0,
+        pending: parseInt(applicationStats[0].pending_count) || 0,
+        under_review: parseInt(applicationStats[0].under_review_count) || 0,
+        approved: parseInt(processedStats[0].approved_count) || 0,
+        rejected: parseInt(processedStats[0].rejected_count) || 0,
         approval_rate: parseFloat(approvalRate)
       },
       field_statistics: fieldStats.map(field => ({
@@ -768,145 +780,6 @@ router.delete('/:id', authenticateToken, validateId, async (req, res) => {
     errorResponse(
       res,
       '신청 취소/삭제 중 오류가 발생했습니다.',
-      RESPONSE_CODES.DATABASE_ERROR,
-      HTTP_STATUS.INTERNAL_SERVER_ERROR
-    );
-  }
-});
-
-/**
- * GET /api/consultant-applications/statistics
- * 상담사 신청 통계 조회 (인증 불필요)
- */
-router.get('/statistics', async (req, res) => {
-  try {
-    const { start_date = null, end_date = null } = req.query;
-
-    // 기간 설정
-    let periodCondition = '';
-    let periodParams = [];
-
-    if (start_date && end_date) {
-      periodCondition = 'AND created_at BETWEEN ? AND ?';
-      periodParams = [start_date, end_date];
-    } else {
-      // 기본값: 최근 30일
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      periodCondition = 'AND created_at >= ?';
-      periodParams = [thirtyDaysAgo.toISOString().split('T')[0]];
-    }
-
-    // 전체 통계
-    const [totalStats] = await pool.execute(
-      `SELECT
-        COUNT(*) as total_applications,
-        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_count,
-        SUM(CASE WHEN status = 'under_review' THEN 1 ELSE 0 END) as under_review_count,
-        SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved_count,
-        SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected_count
-       FROM consultant_applications
-       WHERE 1=1 ${periodCondition}`,
-      periodParams
-    );
-
-    // 상담 분야별 통계
-    const [fieldStats] = await pool.execute(
-      `SELECT
-        consultation_field,
-        COUNT(*) as count,
-        SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved_count
-       FROM consultant_applications
-       WHERE 1=1 ${periodCondition}
-       GROUP BY consultation_field`,
-      periodParams
-    );
-
-    // 월별 신청 추이 (최근 6개월)
-    const [monthlyStats] = await pool.execute(
-      `SELECT
-        DATE_FORMAT(created_at, '%Y-%m') as month,
-        COUNT(*) as total_count,
-        SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved_count,
-        SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected_count
-       FROM consultant_applications
-       WHERE created_at >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
-       GROUP BY DATE_FORMAT(created_at, '%Y-%m')
-       ORDER BY month DESC`,
-      []
-    );
-
-    // 승인율 계산
-    const total = parseInt(totalStats[0].total_applications) || 0;
-    const approved = parseInt(totalStats[0].approved_count) || 0;
-    const approvalRate = total > 0 ? ((approved / total) * 100).toFixed(2) : 0;
-
-    // 평균 처리 시간 (승인/거절된 신청 기준)
-    const [avgProcessingTime] = await pool.execute(
-      `SELECT
-        AVG(TIMESTAMPDIFF(DAY, created_at, processed_at)) as avg_days
-       FROM consultant_applications
-       WHERE status IN ('approved', 'rejected')
-         AND processed_at IS NOT NULL
-         ${periodCondition}`,
-      periodParams
-    );
-
-    // 최근 신청 현황 (최근 7일)
-    const [recentStats] = await pool.execute(
-      `SELECT
-        DATE(created_at) as date,
-        COUNT(*) as count
-       FROM consultant_applications
-       WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
-       GROUP BY DATE(created_at)
-       ORDER BY date DESC`,
-      []
-    );
-
-    successResponse(res, '상담사 신청 통계 조회 완료', {
-      period: {
-        start: start_date || periodParams[0],
-        end: end_date || new Date().toISOString().split('T')[0]
-      },
-      total_statistics: {
-        total_applications: parseInt(totalStats[0].total_applications) || 0,
-        pending: parseInt(totalStats[0].pending_count) || 0,
-        under_review: parseInt(totalStats[0].under_review_count) || 0,
-        approved: parseInt(totalStats[0].approved_count) || 0,
-        rejected: parseInt(totalStats[0].rejected_count) || 0,
-        approval_rate: parseFloat(approvalRate)
-      },
-      field_statistics: fieldStats.map(field => ({
-        consultation_field: field.consultation_field,
-        total_count: parseInt(field.count) || 0,
-        approved_count: parseInt(field.approved_count) || 0,
-        approval_rate: field.count > 0
-          ? parseFloat(((field.approved_count / field.count) * 100).toFixed(2))
-          : 0
-      })),
-      monthly_trend: monthlyStats.map(month => ({
-        month: month.month,
-        total_count: parseInt(month.total_count) || 0,
-        approved_count: parseInt(month.approved_count) || 0,
-        rejected_count: parseInt(month.rejected_count) || 0
-      })),
-      processing_time: {
-        average_days: avgProcessingTime[0].avg_days
-          ? parseFloat(avgProcessingTime[0].avg_days).toFixed(1)
-          : null
-      },
-      recent_applications: recentStats.map(stat => ({
-        date: stat.date,
-        count: parseInt(stat.count) || 0
-      }))
-    });
-
-  } catch (error) {
-    console.error('신청 통계 조회 에러:', error);
-    errorResponse(
-      res,
-      '신청 통계 조회 중 오류가 발생했습니다.',
       RESPONSE_CODES.DATABASE_ERROR,
       HTTP_STATUS.INTERNAL_SERVER_ERROR
     );
