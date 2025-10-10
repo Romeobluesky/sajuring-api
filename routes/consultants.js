@@ -855,6 +855,124 @@ router.put('/:id/status', authenticateToken, validateId, async (req, res) => {
 });
 
 /**
+ * GET /api/consultants/:id/consultations
+ * 상담사의 상담 내역 조회
+ * Query params: status, consultation_type, page, limit
+ */
+router.get('/:id/consultations', authenticateToken, validateId, validatePagination, async (req, res) => {
+  try {
+    const consultantId = req.params.id;
+    const {
+      status = null,
+      consultation_type = null,
+      page = PAGINATION.DEFAULT_PAGE,
+      limit = PAGINATION.DEFAULT_LIMIT
+    } = req.query;
+
+    // 상담사 존재 확인
+    const [consultants] = await pool.execute(
+      'SELECT id, consultant_number, user_id FROM consultants WHERE id = ?',
+      [consultantId]
+    );
+
+    if (consultants.length === 0) {
+      return errorResponse(
+        res,
+        '상담사를 찾을 수 없습니다.',
+        RESPONSE_CODES.NOT_FOUND,
+        HTTP_STATUS.NOT_FOUND
+      );
+    }
+
+    const consultant = consultants[0];
+
+    // 권한 확인: 본인 또는 관리자만 조회 가능
+    const isOwner = req.user.login_id === consultant.user_id;
+    const isAdmin = req.user.role_level === 10;
+
+    if (!isOwner && !isAdmin) {
+      return errorResponse(
+        res,
+        '권한이 없습니다.',
+        RESPONSE_CODES.FORBIDDEN,
+        HTTP_STATUS.FORBIDDEN
+      );
+    }
+
+    // WHERE 조건 구성
+    let whereConditions = ['c.consultant_id = ?'];
+    let queryParams = [consultant.consultant_number];
+
+    if (status) {
+      whereConditions.push('c.status = ?');
+      queryParams.push(status);
+    }
+
+    if (consultation_type) {
+      whereConditions.push('c.consultation_type = ?');
+      queryParams.push(consultation_type);
+    }
+
+    const whereClause = whereConditions.join(' AND ');
+    const limitNum = Math.min(parseInt(limit) || 20, 100);
+    const offset = (page - 1) * limitNum;
+
+    // 상담 내역 조회
+    const [consultations] = await pool.execute(
+      `SELECT c.id, c.consultation_id, c.consultation_type, c.consultation_method,
+       c.consultation_date,
+       c.start_datetime, c.end_datetime, c.duration_time,
+       c.start_time, c.end_time,
+       c.amount, c.status, c.consultation_summary, c.consultation_notes,
+       u.id as customer_id, u.username as customer_name, u.nickname as customer_nickname,
+       CASE WHEN r.id IS NOT NULL THEN true ELSE false END as has_review,
+       r.review_rating, r.review_content,
+       CASE WHEN c.end_datetime IS NOT NULL
+            THEN DATE_ADD(c.end_datetime, INTERVAL 7 DAY)
+            WHEN c.end_time IS NOT NULL
+            THEN DATE_ADD(c.end_time, INTERVAL 7 DAY)
+            ELSE NULL END as review_deadline
+       FROM consultations c
+       LEFT JOIN users u ON c.customer_id = u.id
+       LEFT JOIN reviews r ON c.id = r.consultation_id
+       WHERE ${whereClause}
+       ORDER BY c.consultation_date DESC,
+                COALESCE(c.start_datetime, c.start_time) DESC
+       LIMIT ${limitNum} OFFSET ${offset}`,
+      queryParams
+    );
+
+    // 전체 개수 조회
+    const [countResult] = await pool.execute(
+      `SELECT COUNT(*) as total FROM consultations c WHERE ${whereClause}`,
+      queryParams
+    );
+    const total = countResult[0].total;
+
+    const pagination = createPagination(page, limitNum, total);
+
+    successResponse(res, '상담사 상담 내역 조회 완료', {
+      consultations,
+      count: consultations.length,
+      filters: {
+        status,
+        consultation_type,
+        limit: limitNum
+      }
+    }, pagination);
+
+  } catch (error) {
+    console.error('상담사 상담 내역 조회 에러:', error);
+    errorResponse(
+      res,
+      '상담사 상담 내역 조회 중 오류가 발생했습니다.',
+      RESPONSE_CODES.DATABASE_ERROR,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
+  }
+});
+
+/**
  * GET /api/consultants/:id/statistics
  * 상담사 통계 조회 (상담 횟수, 총 상담 시간, 부재 횟수)
  * Query params: start_date, end_date (옵션)
