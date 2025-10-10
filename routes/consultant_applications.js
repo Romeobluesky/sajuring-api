@@ -636,9 +636,9 @@ router.delete('/applications/:id', authenticateToken, validateId, async (req, re
 
 /**
  * GET /api/consultants/applications/statistics
- * 상담사 신청 통계 조회 (관리자 전용)
+ * 상담사 신청 통계 조회 (인증 불필요)
  */
-router.get('/applications/statistics', authenticateToken, requireAdmin, async (req, res) => {
+router.get('/applications/statistics', async (req, res) => {
   try {
     const { start_date = null, end_date = null } = req.query;
 
