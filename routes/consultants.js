@@ -973,6 +973,102 @@ router.get('/:id/consultations', authenticateToken, validateId, validatePaginati
 });
 
 /**
+ * GET /api/consultants/:id/statistics/by-fee
+ * 상담사 고객이용료별 통계 조회
+ * Query params: month (YYYY-MM 형식, 필수)
+ */
+router.get('/:id/statistics/by-fee', authenticateToken, validateId, async (req, res) => {
+  try {
+    const consultantId = req.params.id;
+    const { month } = req.query;
+
+    // month 파라미터 검증
+    if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+      return errorResponse(
+        res,
+        'month 파라미터가 필요합니다. (형식: YYYY-MM)',
+        RESPONSE_CODES.VALIDATION_ERROR,
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+
+    // 상담사 존재 확인
+    const [consultants] = await pool.execute(
+      'SELECT id, consultant_number FROM consultants WHERE id = ?',
+      [consultantId]
+    );
+
+    if (consultants.length === 0) {
+      return errorResponse(
+        res,
+        '상담사를 찾을 수 없습니다.',
+        RESPONSE_CODES.NOT_FOUND,
+        HTTP_STATUS.NOT_FOUND
+      );
+    }
+
+    const consultant = consultants[0];
+
+    // 권한 확인: 본인 또는 관리자만 조회 가능
+    const isOwner = req.user.login_id === consultant.consultant_number ||
+                    req.user.id === consultants[0].user_id;
+    const isAdmin = req.user.role_level === 10;
+
+    if (!isOwner && !isAdmin) {
+      return errorResponse(
+        res,
+        '권한이 없습니다.',
+        RESPONSE_CODES.FORBIDDEN,
+        HTTP_STATUS.FORBIDDEN
+      );
+    }
+
+    // 전화상담 고객이용료별 통계 조회
+    const [phoneStats] = await pool.execute(
+      `SELECT
+         fee_rate_at_time as consultation_fee,
+         SUM(TIME_TO_SEC(duration_time)) as total_time_seconds,
+         COUNT(*) as consultation_count
+       FROM consultations
+       WHERE consultant_id = ?
+         AND DATE_FORMAT(consultation_date, '%Y-%m') = ?
+         AND consultation_method = '전화상담'
+         AND status = '완료'
+       GROUP BY fee_rate_at_time
+       ORDER BY fee_rate_at_time ASC`,
+      [consultant.consultant_number, month]
+    );
+
+    // 전화상담 전체 합계 계산
+    const phoneTotalTime = phoneStats.reduce((sum, stat) => sum + parseInt(stat.total_time_seconds || 0), 0);
+    const phoneTotalCount = phoneStats.reduce((sum, stat) => sum + parseInt(stat.consultation_count || 0), 0);
+
+    successResponse(res, '상담사 고객이용료별 통계 조회 완료', {
+      year_month: month,
+      consultant_id: parseInt(consultantId),
+      phone_consultation: {
+        fee_breakdown: phoneStats.map(stat => ({
+          consultation_fee: parseInt(stat.consultation_fee),
+          total_time_seconds: parseInt(stat.total_time_seconds || 0),
+          consultation_count: parseInt(stat.consultation_count || 0)
+        })),
+        total_time_seconds: phoneTotalTime,
+        total_count: phoneTotalCount
+      }
+    });
+
+  } catch (error) {
+    console.error('상담사 고객이용료별 통계 조회 에러:', error);
+    errorResponse(
+      res,
+      '상담사 고객이용료별 통계 조회 중 오류가 발생했습니다.',
+      RESPONSE_CODES.DATABASE_ERROR,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
+  }
+});
+
+/**
  * GET /api/consultants/:id/statistics
  * 상담사 통계 조회 (상담 횟수, 총 상담 시간, 부재 횟수)
  * Query params: start_date, end_date (옵션)
