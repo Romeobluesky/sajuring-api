@@ -111,7 +111,7 @@ const validateApplication = [
 ];
 
 /**
- * POST /api/consultants/apply
+ * POST /api/consultant-applications/apply
  * 상담사 신청
  */
 router.post('/apply', authenticateToken, validateApplication, async (req, res) => {
@@ -197,10 +197,10 @@ router.post('/apply', authenticateToken, validateApplication, async (req, res) =
 });
 
 /**
- * GET /api/consultants/applications
+ * GET /api/consultant-applications
  * 신청 목록 조회 (관리자: 전체, 일반 사용자: 본인)
  */
-router.get('/applications', authenticateToken, validatePagination, async (req, res) => {
+router.get('/', authenticateToken, validatePagination, async (req, res) => {
   try {
     const userId = req.user.id;
     const isAdmin = req.user.role_level >= 10;
@@ -300,10 +300,10 @@ router.get('/applications', authenticateToken, validatePagination, async (req, r
 });
 
 /**
- * GET /api/consultants/applications/:id
+ * GET /api/consultant-applications/:id
  * 신청 상세 조회
  */
-router.get('/applications/:id', authenticateToken, validateId, async (req, res) => {
+router.get('/:id', authenticateToken, validateId, async (req, res) => {
   try {
     const applicationId = req.params.id;
     const userId = req.user.id;
@@ -362,10 +362,10 @@ router.get('/applications/:id', authenticateToken, validateId, async (req, res) 
 });
 
 /**
- * PUT /api/consultants/applications/:id
+ * PUT /api/consultant-applications/:id
  * 신청 정보 수정 (승인 전만 가능)
  */
-router.put('/applications/:id', authenticateToken, validateId, validateApplication, async (req, res) => {
+router.put('/:id', authenticateToken, validateId, validateApplication, async (req, res) => {
   try {
     const applicationId = req.params.id;
     const userId = req.user.id;
@@ -456,10 +456,10 @@ router.put('/applications/:id', authenticateToken, validateId, validateApplicati
 });
 
 /**
- * PUT /api/consultants/applications/:id/status
+ * PUT /api/consultant-applications/:id/status
  * 신청 상태 변경 (관리자 전용)
  */
-router.put('/applications/:id/status', authenticateToken, requireAdmin, validateId, async (req, res) => {
+router.put('/:id/status', authenticateToken, requireAdmin, validateId, async (req, res) => {
   try {
     const applicationId = req.params.id;
     const adminId = req.user.id;
@@ -567,10 +567,10 @@ router.put('/applications/:id/status', authenticateToken, requireAdmin, validate
 });
 
 /**
- * DELETE /api/consultants/applications/:id
+ * DELETE /api/consultant-applications/:id
  * 신청 취소/삭제
  */
-router.delete('/applications/:id', authenticateToken, validateId, async (req, res) => {
+router.delete('/:id', authenticateToken, validateId, async (req, res) => {
   try {
     const applicationId = req.params.id;
     const userId = req.user.id;
@@ -635,10 +635,10 @@ router.delete('/applications/:id', authenticateToken, validateId, async (req, re
 });
 
 /**
- * GET /api/consultants/applications/statistics
+ * GET /api/consultant-applications/statistics
  * 상담사 신청 통계 조회 (인증 불필요)
  */
-router.get('/applications/statistics', async (req, res) => {
+router.get('/statistics', async (req, res) => {
   try {
     const { start_date = null, end_date = null } = req.query;
 
@@ -774,10 +774,10 @@ router.get('/applications/statistics', async (req, res) => {
 });
 
 /**
- * POST /api/consultants/applications/:id/upload
+ * POST /api/consultant-applications/:id/upload
  * 첨부 파일 업로드
  */
-router.post('/applications/:id/upload', authenticateToken, validateId, upload.single('file'), async (req, res) => {
+router.post('/:id/upload', authenticateToken, validateId, upload.single('file'), async (req, res) => {
   try {
     const applicationId = req.params.id;
     const userId = req.user.id;
