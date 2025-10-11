@@ -364,6 +364,9 @@ router.get('/my-status', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
 
+    // 디버깅 로그
+    console.log('🔍 /my-status 호출 - user_id:', userId, 'user:', req.user);
+
     // 현재 사용자의 가장 최근 신청 조회
     const [applications] = await pool.execute(
       `SELECT
@@ -378,6 +381,8 @@ router.get('/my-status', authenticateToken, async (req, res) => {
        LIMIT 1`,
       [userId]
     );
+
+    console.log('📊 조회 결과:', applications.length, '건');
 
     if (applications.length === 0) {
       return successResponse(res, '신청 내역이 없습니다.', {
