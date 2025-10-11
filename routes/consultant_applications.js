@@ -370,7 +370,7 @@ router.get('/my-status', authenticateToken, async (req, res) => {
     // 현재 사용자의 가장 최근 신청 조회
     const [applications] = await pool.execute(
       `SELECT
-        id, title, applicant_name, stage_name,
+        id, user_id, title, applicant_name, stage_name,
         consultation_field, region, profile_image_path,
         introduction, phone, email, content, portfolio_url,
         status, admin_note, processed_by, processed_at,
@@ -453,7 +453,7 @@ router.get('/', authenticateToken, validatePagination, async (req, res) => {
     // 신청 목록 조회
     const [applications] = await pool.execute(
       `SELECT
-        id, title, applicant_name, stage_name,
+        id, user_id, title, applicant_name, stage_name,
         consultation_field, region, profile_image_path,
         introduction, phone, email, content, portfolio_url,
         status, admin_note, processed_by, processed_at,
