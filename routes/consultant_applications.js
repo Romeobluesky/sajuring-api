@@ -116,7 +116,9 @@ const validateApplication = [
  */
 router.post('/apply', authenticateToken, upload.single('profile_image'), async (req, res) => {
   try {
-    const userId = req.user.id;
+    // JWT에서 사용자 정보 추출
+    const userLoginId = req.user.login_id;  // users.login_id (문자열)
+    const userNickname = req.user.nickname;  // users.nickname (문자열)
 
     // 중복 신청 체크 (pending, reviewing 상태가 있는지 확인)
     const [existingApplications] = await pool.execute(
@@ -124,7 +126,7 @@ router.post('/apply', authenticateToken, upload.single('profile_image'), async (
        WHERE users_id = ? AND status IN ('pending', 'reviewing')
        ORDER BY created_at DESC
        LIMIT 1`,
-      [userId]
+      [userLoginId]
     );
 
     if (existingApplications.length > 0) {
@@ -146,7 +148,9 @@ router.post('/apply', authenticateToken, upload.single('profile_image'), async (
       phone,
       email,
       content,
-      portfolio_url
+      portfolio_url,
+      users_id,  // 클라이언트에서 전송한 users_id (옵션)
+      nickname   // 클라이언트에서 전송한 nickname (옵션)
     } = req.body;
 
     // 필수 필드 검증
@@ -162,15 +166,20 @@ router.post('/apply', authenticateToken, upload.single('profile_image'), async (
     // 프로필 이미지 처리 (multer로 업로드된 파일)
     const profile_image_path = req.file ? req.file.path : null;
 
+    // users_id와 nickname은 JWT 값 우선, 없으면 클라이언트 값 사용
+    const finalUsersId = users_id || userLoginId;
+    const finalNickname = nickname || userNickname;
+
     // 상담사 신청 등록
     const [result] = await pool.execute(
       `INSERT INTO consultant_applications (
-        users_id, title, applicant_name, stage_name, consultation_field,
+        users_id, nickname, title, applicant_name, stage_name, consultation_field,
         region, profile_image_path, introduction, phone, email,
         content, portfolio_url
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        userId,
+        finalUsersId,
+        finalNickname,
         title,
         applicant_name,
         stage_name || null,
@@ -362,15 +371,15 @@ router.get('/statistics', async (req, res) => {
  */
 router.get('/my-status', authenticateToken, async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userLoginId = req.user.login_id;  // users.login_id (문자열)
 
     // 디버깅 로그
-    console.log('🔍 /my-status 호출 - users_id:', userId, 'user:', req.user);
+    console.log('🔍 /my-status 호출 - users_id:', userLoginId, 'user:', req.user);
 
     // 현재 사용자의 가장 최근 신청 조회
     const [applications] = await pool.execute(
       `SELECT
-        id, users_id, title, applicant_name, stage_name,
+        id, users_id, nickname, title, applicant_name, stage_name,
         consultation_field, region, profile_image_path,
         introduction, phone, email, content, portfolio_url,
         status, admin_note, processed_by, processed_at,
@@ -379,7 +388,7 @@ router.get('/my-status', authenticateToken, async (req, res) => {
        WHERE users_id = ?
        ORDER BY created_at DESC
        LIMIT 1`,
-      [userId]
+      [userLoginId]
     );
 
     console.log('📊 조회 결과:', applications.length, '건');
