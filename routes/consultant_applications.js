@@ -168,7 +168,7 @@ router.post('/apply', authenticateToken, upload.single('profile_image'), async (
 
     // users_id와 nickname은 JWT 값 우선, 없으면 클라이언트 값 사용
     const finalUsersId = users_id || userLoginId;
-    const finalNickname = nickname || userNickname;
+    const finalNickname = nickname || userNickname || null;  // 기본값 null 처리
 
     // 상담사 신청 등록
     const [result] = await pool.execute(
@@ -519,7 +519,6 @@ router.get('/:id', authenticateToken, validateId, async (req, res) => {
         reviewer.username as reviewer_name
        FROM consultant_applications a
        LEFT JOIN users u ON a.users_id = u.login_id
-       LEFT JOIN users reviewer ON a.reviewed_by = reviewer.id
        WHERE a.id = ?`,
       [applicationId]
     );
@@ -710,7 +709,7 @@ router.put('/:id/status', authenticateToken, requireAdmin, validateId, async (re
     await pool.execute(
       `UPDATE consultant_applications
        SET status = ?, rejection_reason = ?, admin_notes = ?,
-           reviewed_by = ?, reviewed_at = NOW(), updated_at = NOW()
+           processed_by = ?, processed_at = NOW(), updated_at = NOW()
        WHERE id = ?`,
       [status, rejection_reason, admin_notes, adminId, applicationId]
     );
