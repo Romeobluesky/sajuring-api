@@ -509,7 +509,7 @@ router.get('/', validatePagination, async (req, res) => {
 router.get('/:id', authenticateToken, validateId, async (req, res) => {
   try {
     const applicationId = req.params.id;
-    const userId = req.user.id;
+    const userLoginId = req.user.login_id;
     const isAdmin = req.user.role_level >= 10;
 
     const [applications] = await pool.execute(
@@ -518,7 +518,7 @@ router.get('/:id', authenticateToken, validateId, async (req, res) => {
         u.username, u.login_id, u.email as user_email,
         reviewer.username as reviewer_name
        FROM consultant_applications a
-       LEFT JOIN users u ON a.users_id = u.id
+       LEFT JOIN users u ON a.users_id = u.login_id
        LEFT JOIN users reviewer ON a.reviewed_by = reviewer.id
        WHERE a.id = ?`,
       [applicationId]
@@ -536,7 +536,7 @@ router.get('/:id', authenticateToken, validateId, async (req, res) => {
     const application = applications[0];
 
     // 권한 확인 (본인 또는 관리자)
-    if (!isAdmin && application.users_id !== userId) {
+    if (!isAdmin && application.users_id !== userLoginId) {
       return errorResponse(
         res,
         '권한이 없습니다.',
@@ -571,7 +571,7 @@ router.get('/:id', authenticateToken, validateId, async (req, res) => {
 router.put('/:id', authenticateToken, validateId, validateApplication, async (req, res) => {
   try {
     const applicationId = req.params.id;
-    const userId = req.user.id;
+    const userLoginId = req.user.login_id;
 
     const {
       name,
@@ -603,7 +603,7 @@ router.put('/:id', authenticateToken, validateId, validateApplication, async (re
     const application = applications[0];
 
     // 권한 확인 (본인만)
-    if (application.users_id !== userId) {
+    if (application.users_id !== userLoginId) {
       return errorResponse(
         res,
         '본인의 신청만 수정할 수 있습니다.',
@@ -717,9 +717,9 @@ router.put('/:id/status', authenticateToken, requireAdmin, validateId, async (re
 
     // 승인 시 consultants 테이블에 추가
     if (status === 'approved') {
-      // 사용자 정보 조회
+      // 사용자 정보 조회 (users_id는 이미 login_id 문자열)
       const [users] = await pool.execute(
-        'SELECT login_id FROM users WHERE id = ?',
+        'SELECT login_id FROM users WHERE login_id = ?',
         [application.users_id]
       );
 
@@ -776,7 +776,7 @@ router.put('/:id/status', authenticateToken, requireAdmin, validateId, async (re
 router.delete('/:id', authenticateToken, validateId, async (req, res) => {
   try {
     const applicationId = req.params.id;
-    const userId = req.user.id;
+    const userLoginId = req.user.login_id;
     const isAdmin = req.user.role_level >= 10;
 
     // 신청 정보 확인
@@ -797,7 +797,7 @@ router.delete('/:id', authenticateToken, validateId, async (req, res) => {
     const application = applications[0];
 
     // 권한 확인 (본인 또는 관리자)
-    if (!isAdmin && application.users_id !== userId) {
+    if (!isAdmin && application.users_id !== userLoginId) {
       return errorResponse(
         res,
         '권한이 없습니다.',
@@ -844,7 +844,7 @@ router.delete('/:id', authenticateToken, validateId, async (req, res) => {
 router.post('/:id/upload', authenticateToken, validateId, upload.single('file'), async (req, res) => {
   try {
     const applicationId = req.params.id;
-    const userId = req.user.id;
+    const userLoginId = req.user.login_id;
 
     if (!req.file) {
       return errorResponse(
@@ -875,7 +875,7 @@ router.post('/:id/upload', authenticateToken, validateId, upload.single('file'),
     const application = applications[0];
 
     // 권한 확인
-    if (application.users_id !== userId) {
+    if (application.users_id !== userLoginId) {
       fs.unlinkSync(req.file.path);
       return errorResponse(
         res,
