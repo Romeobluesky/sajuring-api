@@ -116,6 +116,26 @@ const validateApplication = [
  */
 router.post('/apply', authenticateToken, upload.single('profile_image'), async (req, res) => {
   try {
+    const userId = req.user.id;
+
+    // 중복 신청 체크 (pending, reviewing 상태가 있는지 확인)
+    const [existingApplications] = await pool.execute(
+      `SELECT id, status FROM consultant_applications
+       WHERE user_id = ? AND status IN ('pending', 'reviewing')
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [userId]
+    );
+
+    if (existingApplications.length > 0) {
+      return errorResponse(
+        res,
+        '이미 신청 내역이 있습니다. 기존 신청이 처리된 후 다시 신청해주세요.',
+        RESPONSE_CODES.VALIDATION_ERROR,
+        HTTP_STATUS.BAD_REQUEST
+      );
+    }
+
     const {
       title,
       applicant_name,
@@ -145,11 +165,12 @@ router.post('/apply', authenticateToken, upload.single('profile_image'), async (
     // 상담사 신청 등록
     const [result] = await pool.execute(
       `INSERT INTO consultant_applications (
-        title, applicant_name, stage_name, consultation_field,
+        user_id, title, applicant_name, stage_name, consultation_field,
         region, profile_image_path, introduction, phone, email,
         content, portfolio_url, status, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW(), NOW())`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW(), NOW())`,
       [
+        userId,
         title,
         applicant_name,
         stage_name || null,
@@ -336,11 +357,59 @@ router.get('/statistics', async (req, res) => {
 });
 
 /**
- * GET /api/consultant-applications
- * 신청 목록 조회 (인증 불필요 - 공개 API)
+ * GET /api/consultant-applications/my-status
+ * 내 상담사 신청 상태 조회 (JWT 토큰 기반)
  */
-router.get('/', validatePagination, async (req, res) => {
+router.get('/my-status', authenticateToken, async (req, res) => {
   try {
+    const userId = req.user.id;
+
+    // 현재 사용자의 가장 최근 신청 조회
+    const [applications] = await pool.execute(
+      `SELECT
+        id, title, applicant_name, stage_name,
+        consultation_field, region, profile_image_path,
+        introduction, phone, email, content, portfolio_url,
+        status, admin_note, processed_by, processed_at,
+        created_at, updated_at
+       FROM consultant_applications
+       WHERE user_id = ?
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [userId]
+    );
+
+    if (applications.length === 0) {
+      return successResponse(res, '신청 내역이 없습니다.', {
+        has_application: false,
+        application: null
+      });
+    }
+
+    successResponse(res, '신청 상태 조회 완료', {
+      has_application: true,
+      application: applications[0]
+    });
+
+  } catch (error) {
+    console.error('신청 상태 조회 에러:', error);
+    errorResponse(
+      res,
+      '신청 상태 조회 중 오류가 발생했습니다.',
+      RESPONSE_CODES.DATABASE_ERROR,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR
+    );
+  }
+});
+
+/**
+ * GET /api/consultant-applications
+ * 신청 목록 조회 (JWT 인증 필수 - 본인 신청만 조회)
+ */
+router.get('/', authenticateToken, validatePagination, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const isAdmin = req.user.role_level >= 10;
 
     const {
       status = null,
@@ -352,6 +421,12 @@ router.get('/', validatePagination, async (req, res) => {
     // WHERE 조건 구성
     let whereConditions = [];
     let queryParams = [];
+
+    // 관리자가 아닌 경우 본인의 신청만 조회
+    if (!isAdmin) {
+      whereConditions.push('user_id = ?');
+      queryParams.push(userId);
+    }
 
     if (status) {
       whereConditions.push('status = ?');
