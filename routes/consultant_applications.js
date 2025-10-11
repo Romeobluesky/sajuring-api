@@ -121,7 +121,7 @@ router.post('/apply', authenticateToken, upload.single('profile_image'), async (
     // 중복 신청 체크 (pending, reviewing 상태가 있는지 확인)
     const [existingApplications] = await pool.execute(
       `SELECT id, status FROM consultant_applications
-       WHERE user_id = ? AND status IN ('pending', 'reviewing')
+       WHERE users_id = ? AND status IN ('pending', 'reviewing')
        ORDER BY created_at DESC
        LIMIT 1`,
       [userId]
@@ -165,7 +165,7 @@ router.post('/apply', authenticateToken, upload.single('profile_image'), async (
     // 상담사 신청 등록
     const [result] = await pool.execute(
       `INSERT INTO consultant_applications (
-        user_id, title, applicant_name, stage_name, consultation_field,
+        users_id, title, applicant_name, stage_name, consultation_field,
         region, profile_image_path, introduction, phone, email,
         content, portfolio_url
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -365,18 +365,18 @@ router.get('/my-status', authenticateToken, async (req, res) => {
     const userId = req.user.id;
 
     // 디버깅 로그
-    console.log('🔍 /my-status 호출 - user_id:', userId, 'user:', req.user);
+    console.log('🔍 /my-status 호출 - users_id:', userId, 'user:', req.user);
 
     // 현재 사용자의 가장 최근 신청 조회
     const [applications] = await pool.execute(
       `SELECT
-        id, user_id, title, applicant_name, stage_name,
+        id, users_id, title, applicant_name, stage_name,
         consultation_field, region, profile_image_path,
         introduction, phone, email, content, portfolio_url,
         status, admin_note, processed_by, processed_at,
         created_at, updated_at
        FROM consultant_applications
-       WHERE user_id = ?
+       WHERE users_id = ?
        ORDER BY created_at DESC
        LIMIT 1`,
       [userId]
@@ -429,7 +429,7 @@ router.get('/', authenticateToken, validatePagination, async (req, res) => {
 
     // 관리자가 아닌 경우 본인의 신청만 조회
     if (!isAdmin) {
-      whereConditions.push('user_id = ?');
+      whereConditions.push('users_id = ?');
       queryParams.push(userId);
     }
 
@@ -453,7 +453,7 @@ router.get('/', authenticateToken, validatePagination, async (req, res) => {
     // 신청 목록 조회
     const [applications] = await pool.execute(
       `SELECT
-        id, user_id, title, applicant_name, stage_name,
+        id, users_id, title, applicant_name, stage_name,
         consultation_field, region, profile_image_path,
         introduction, phone, email, content, portfolio_url,
         status, admin_note, processed_by, processed_at,
@@ -518,7 +518,7 @@ router.get('/:id', authenticateToken, validateId, async (req, res) => {
         u.username, u.login_id, u.email as user_email,
         reviewer.username as reviewer_name
        FROM consultant_applications a
-       LEFT JOIN users u ON a.user_id = u.id
+       LEFT JOIN users u ON a.users_id = u.id
        LEFT JOIN users reviewer ON a.reviewed_by = reviewer.id
        WHERE a.id = ?`,
       [applicationId]
@@ -536,7 +536,7 @@ router.get('/:id', authenticateToken, validateId, async (req, res) => {
     const application = applications[0];
 
     // 권한 확인 (본인 또는 관리자)
-    if (!isAdmin && application.user_id !== userId) {
+    if (!isAdmin && application.users_id !== userId) {
       return errorResponse(
         res,
         '권한이 없습니다.',
@@ -587,7 +587,7 @@ router.put('/:id', authenticateToken, validateId, validateApplication, async (re
 
     // 신청 정보 확인
     const [applications] = await pool.execute(
-      'SELECT id, user_id, status FROM consultant_applications WHERE id = ?',
+      'SELECT id, users_id, status FROM consultant_applications WHERE id = ?',
       [applicationId]
     );
 
@@ -603,7 +603,7 @@ router.put('/:id', authenticateToken, validateId, validateApplication, async (re
     const application = applications[0];
 
     // 권한 확인 (본인만)
-    if (application.user_id !== userId) {
+    if (application.users_id !== userId) {
       return errorResponse(
         res,
         '본인의 신청만 수정할 수 있습니다.',
@@ -691,7 +691,7 @@ router.put('/:id/status', authenticateToken, requireAdmin, validateId, async (re
 
     // 신청 정보 확인
     const [applications] = await pool.execute(
-      'SELECT id, user_id, status, name, email FROM consultant_applications WHERE id = ?',
+      'SELECT id, users_id, status, name, email FROM consultant_applications WHERE id = ?',
       [applicationId]
     );
 
@@ -720,7 +720,7 @@ router.put('/:id/status', authenticateToken, requireAdmin, validateId, async (re
       // 사용자 정보 조회
       const [users] = await pool.execute(
         'SELECT login_id FROM users WHERE id = ?',
-        [application.user_id]
+        [application.users_id]
       );
 
       if (users.length > 0) {
@@ -781,7 +781,7 @@ router.delete('/:id', authenticateToken, validateId, async (req, res) => {
 
     // 신청 정보 확인
     const [applications] = await pool.execute(
-      'SELECT id, user_id, status FROM consultant_applications WHERE id = ?',
+      'SELECT id, users_id, status FROM consultant_applications WHERE id = ?',
       [applicationId]
     );
 
@@ -797,7 +797,7 @@ router.delete('/:id', authenticateToken, validateId, async (req, res) => {
     const application = applications[0];
 
     // 권한 확인 (본인 또는 관리자)
-    if (!isAdmin && application.user_id !== userId) {
+    if (!isAdmin && application.users_id !== userId) {
       return errorResponse(
         res,
         '권한이 없습니다.',
@@ -857,7 +857,7 @@ router.post('/:id/upload', authenticateToken, validateId, upload.single('file'),
 
     // 신청 정보 확인
     const [applications] = await pool.execute(
-      'SELECT id, user_id, status FROM consultant_applications WHERE id = ?',
+      'SELECT id, users_id, status FROM consultant_applications WHERE id = ?',
       [applicationId]
     );
 
@@ -875,7 +875,7 @@ router.post('/:id/upload', authenticateToken, validateId, upload.single('file'),
     const application = applications[0];
 
     // 권한 확인
-    if (application.user_id !== userId) {
+    if (application.users_id !== userId) {
       fs.unlinkSync(req.file.path);
       return errorResponse(
         res,
