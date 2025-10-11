@@ -167,8 +167,8 @@ router.post('/apply', authenticateToken, upload.single('profile_image'), async (
       `INSERT INTO consultant_applications (
         user_id, title, applicant_name, stage_name, consultation_field,
         region, profile_image_path, introduction, phone, email,
-        content, portfolio_url, status, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW(), NOW())`,
+        content, portfolio_url
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         userId,
         title,
