@@ -409,13 +409,10 @@ router.get('/my-status', authenticateToken, async (req, res) => {
 
 /**
  * GET /api/consultant-applications
- * 신청 목록 조회 (JWT 인증 필수 - 본인 신청만 조회)
+ * 신청 목록 조회 (인증 불필요 - 공개 API)
  */
-router.get('/', authenticateToken, validatePagination, async (req, res) => {
+router.get('/', validatePagination, async (req, res) => {
   try {
-    const userId = req.user.id;
-    const isAdmin = req.user.role_level >= 10;
-
     const {
       status = null,
       consultation_field = null,
@@ -426,12 +423,6 @@ router.get('/', authenticateToken, validatePagination, async (req, res) => {
     // WHERE 조건 구성
     let whereConditions = [];
     let queryParams = [];
-
-    // 관리자가 아닌 경우 본인의 신청만 조회
-    if (!isAdmin) {
-      whereConditions.push('users_id = ?');
-      queryParams.push(userId);
-    }
 
     if (status) {
       whereConditions.push('status = ?');
